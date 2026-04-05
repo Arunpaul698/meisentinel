@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dashboard — SecureCheck SSA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0c0f;--s1:#0e1115;--s2:#111418;--s3:#141920;
+  --border:#1e242c;--border2:#2a3340;
+  --text:#c8d0da;--muted:#5a6672;--dim:#3a4450;
+  --accent:#00d4ff;--a2:#00b8d9;
+  --safe:#00c96e;--warn:#ff9500;--danger:#ff3b30;
+  --mono:'IBM Plex Mono',monospace;
+  --display:'Syne',sans-serif;
+  --body:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh}
+
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:500}
+
+/* ── LAYOUT ──────────────────────────────────────────────────────────────── */
+.dash-wrap {
+  max-width:1280px; margin:0 auto;
+  padding:32px 32px 80px;
+}
+
+.dash-header {
+  display:flex; justify-content:space-between; align-items:flex-start;
+  margin-bottom:32px; padding-bottom:28px; border-bottom:1px solid var(--border);
+}
+.dash-title {
+  font-family:var(--display); font-size:28px; font-weight:800; color:#fff;
+}
+.dash-subtitle {
+  font-family:var(--mono); font-size:11px; color:var(--muted);
+  margin-top:4px; letter-spacing:0.08em;
+}
+.dash-new-scan {
+  font-family:var(--mono); font-size:12px; font-weight:700;
+  letter-spacing:0.08em; color:#0a0c0f; background:var(--accent);
+  padding:12px 24px; text-decoration:none; transition:all 0.15s;
+  white-space:nowrap;
+}
+.dash-new-scan:hover{background:var(--a2);}
+
+/* ── KPI ROW ─────────────────────────────────────────────────────────────── */
+.kpi-row {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:12px;
+  margin-bottom:24px;
+}
+.kpi-card {
+  background:var(--s2); border:1px solid var(--border); padding:22px 24px;
+  position:relative; overflow:hidden;
+}
+.kpi-card::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
+}
+.kpi-card.kpi-total::after   { background:var(--accent); }
+.kpi-card.kpi-auto::after    { background:var(--safe); }
+.kpi-card.kpi-review::after  { background:var(--warn); }
+.kpi-card.kpi-high::after    { background:var(--danger); }
+
+.kpi-label { font-family:var(--mono); font-size:9px; letter-spacing:0.15em; color:var(--muted); margin-bottom:10px; }
+.kpi-val   { font-family:var(--display); font-size:42px; font-weight:800; color:#fff; line-height:1; }
+.kpi-delta {
+  font-family:var(--mono); font-size:10px; color:var(--safe);
+  margin-top:6px; letter-spacing:0.06em;
+}
+.kpi-delta.down { color:var(--danger); }
+
+/* ── MAIN GRID ───────────────────────────────────────────────────────────── */
+.main-grid {
+  display:grid; grid-template-columns:1fr 340px; gap:16px;
+}
+
+/* ── SCAN TABLE ──────────────────────────────────────────────────────────── */
+.panel {
+  background:var(--s2); border:1px solid var(--border);
+}
+.panel-head {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 20px; border-bottom:1px solid var(--border);
+}
+.panel-title { font-family:var(--mono); font-size:11px; letter-spacing:0.12em; color:var(--text); font-weight:600; }
+.panel-action { font-family:var(--mono); font-size:10px; color:var(--accent); cursor:pointer; letter-spacing:0.08em; text-decoration:none; }
+.panel-action:hover { color:var(--a2); }
+
+/* filter tabs */
+.filter-tabs {
+  display:flex; border-bottom:1px solid var(--border); padding:0 20px; gap:0;
+}
+.ftab {
+  font-family:var(--mono); font-size:10px; letter-spacing:0.1em;
+  color:var(--muted); padding:10px 16px; cursor:pointer;
+  border-bottom:2px solid transparent; transition:all 0.15s;
+  background:none; border-top:none; border-left:none; border-right:none;
+}
+.ftab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.ftab:hover:not(.active) { color:var(--text); }
+
+/* table */
+.scan-table { width:100%; border-collapse:collapse; }
+.scan-table thead tr { border-bottom:1px solid var(--border); }
+.scan-table th {
+  font-family:var(--mono); font-size:9px; letter-spacing:0.14em;
+  color:var(--muted); text-align:left; padding:10px 20px; font-weight:400;
+}
+.scan-table td { padding:14px 20px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.scan-table tbody tr { transition:background 0.1s; cursor:pointer; }
+.scan-table tbody tr:hover { background:rgba(255,255,255,0.02); }
+.scan-table tbody tr:last-child td { border-bottom:none; }
+
+.td-target { max-width:220px; }
+.td-target-name { font-family:var(--mono); font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.td-target-type { font-family:var(--mono); font-size:9px; color:var(--muted); letter-spacing:0.08em; margin-top:3px; }
+
+.score-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  font-family:var(--mono); font-size:12px; font-weight:700;
+}
+.score-dot { width:6px; height:6px; border-radius:50%; }
+
+.status-badge {
+  font-family:var(--mono); font-size:9px; letter-spacing:0.1em;
+  padding:3px 8px; border:1px solid; display:inline-block;
+}
+.status-auto   { color:var(--safe);   border-color:rgba(0,201,110,.3);  background:rgba(0,201,110,.07);  }
+.status-review { color:var(--warn);   border-color:rgba(255,149,0,.3);  background:rgba(255,149,0,.07);  }
+.status-high   { color:var(--danger); border-color:rgba(255,59,48,.3);  background:rgba(255,59,48,.07);  }
+
+.td-time { font-family:var(--mono); font-size:10px; color:var(--muted); white-space:nowrap; }
+
+.td-action a {
+  font-family:var(--mono); font-size:10px; color:var(--accent);
+  text-decoration:none; letter-spacing:0.06em;
+}
+.td-action a:hover { color:var(--a2); }
+
+/* empty state */
+.empty-row td {
+  text-align:center; padding:48px 20px;
+  font-family:var(--mono); font-size:12px; color:var(--muted);
+}
+
+/* ── RIGHT COLUMN ────────────────────────────────────────────────────────── */
+.right-col { display:flex; flex-direction:column; gap:16px; }
+
+/* activity feed */
+.activity-feed { display:flex; flex-direction:column; }
+.activity-item {
+  display:flex; gap:12px; padding:14px 20px;
+  border-bottom:1px solid var(--border);
+  transition:background 0.1s;
+}
+.activity-item:last-child { border-bottom:none; }
+.activity-item:hover { background:rgba(255,255,255,0.02); }
+.act-icon {
+  width:28px; height:28px; border-radius:50%;
+  display:grid; place-items:center; font-size:12px; flex-shrink:0;
+}
+.act-icon.safe   { background:rgba(0,201,110,.1);  }
+.act-icon.warn   { background:rgba(255,149,0,.1);  }
+.act-icon.danger { background:rgba(255,59,48,.1);  }
+.act-body { flex:1; min-width:0; }
+.act-name { font-family:var(--mono); font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.act-meta { font-family:var(--mono); font-size:9px; color:var(--muted); margin-top:3px; }
+
+/* mini chart */
+.mini-chart { padding:20px; }
+.chart-bars {
+  display:flex; align-items:flex-end; gap:5px; height:72px;
+}
+.chart-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
+.chart-bar { width:100%; border-radius:1px 1px 0 0; transition:opacity 0.2s; }
+.chart-bar:hover { opacity:0.8; }
+.chart-label { font-family:var(--mono); font-size:8px; color:var(--muted); }
+.chart-legend {
+  display:flex; gap:16px; margin-top:14px; padding-top:12px;
+  border-top:1px solid var(--border);
+}
+.cl-item { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:9px; color:var(--muted); }
+.cl-dot  { width:6px; height:6px; border-radius:50%; }
+
+/* quick stats */
+.quick-stat-row { display:flex; justify-content:space-between; padding:12px 20px; border-bottom:1px solid var(--border); }
+.quick-stat-row:last-child { border-bottom:none; }
+.qs-label { font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:0.06em; }
+.qs-val   { font-family:var(--mono); font-size:11px; color:var(--text); font-weight:600; }
+
+/* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
+@media(max-width:1024px){
+  .main-grid{grid-template-columns:1fr;}
+  .kpi-row{grid-template-columns:repeat(2,1fr);}
+}
+@media(max-width:600px){
+  .dash-wrap{padding:16px 16px 60px;}
+  .kpi-row{grid-template-columns:1fr 1fr;}
+  .dash-header{flex-direction:column;gap:16px;}
+}
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+
+<div class="dash-wrap">
+
+  <!-- Header -->
+  <div class="dash-header">
+    <div>
+      <div class="dash-title">Dashboard</div>
+      <div class="dash-subtitle" id="dash-date">LOADING...</div>
+    </div>
+    <a href="portal.html" class="dash-new-scan">+ NEW SCAN</a>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi-card kpi-total">
+      <div class="kpi-label">TOTAL SCANS · 30 DAYS</div>
+      <div class="kpi-val" id="kpi-total">0</div>
+      <div class="kpi-delta" id="kpi-total-d">Loading...</div>
+    </div>
+    <div class="kpi-card kpi-auto">
+      <div class="kpi-label">AUTO-RESOLVED</div>
+      <div class="kpi-val" id="kpi-auto">0</div>
+      <div class="kpi-delta" id="kpi-auto-d">Loading...</div>
+    </div>
+    <div class="kpi-card kpi-review">
+      <div class="kpi-label">PENDING REVIEW</div>
+      <div class="kpi-val" id="kpi-review">0</div>
+      <div class="kpi-delta" id="kpi-review-d">Loading...</div>
+    </div>
+    <div class="kpi-card kpi-high">
+      <div class="kpi-label">HIGH RISK FLAGS</div>
+      <div class="kpi-val" id="kpi-high">0</div>
+      <div class="kpi-delta down" id="kpi-high-d">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="main-grid">
+
+    <!-- Scan history table -->
+    <div>
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">RECENT SCANS</div>
+          <a href="portal.html" class="panel-action">+ Run New Scan</a>
+        </div>
+        <div class="filter-tabs">
+          <button class="ftab active" onclick="filterScans('all',this)">ALL</button>
+          <button class="ftab" onclick="filterScans('auto',this)">AUTO-RESOLVED</button>
+          <button class="ftab" onclick="filterScans('review',this)">REVIEW</button>
+          <button class="ftab" onclick="filterScans('high',this)">HIGH RISK</button>
+        </div>
+        <table class="scan-table">
+          <thead>
+            <tr>
+              <th>TARGET</th>
+              <th>SCORE</th>
+              <th>STATUS</th>
+              <th>TIME</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="scan-tbody">
+            <tr class="empty-row"><td colspan="5">No scans yet. <a href="portal.html" style="color:var(--accent)">Run your first scan →</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="right-col">
+
+      <!-- Weekly chart -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">SCANS · LAST 7 DAYS</div>
+        </div>
+        <div class="mini-chart">
+          <div class="chart-bars" id="chart-bars">
+            <!-- Injected by JS -->
+          </div>
+          <div class="chart-legend">
+            <div class="cl-item"><div class="cl-dot" style="background:var(--safe)"></div>Clean</div>
+            <div class="cl-item"><div class="cl-dot" style="background:var(--warn)"></div>Review</div>
+            <div class="cl-item"><div class="cl-dot" style="background:var(--danger)"></div>High Risk</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity feed -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">LIVE ACTIVITY</div>
+          <span class="panel-action" style="cursor:default;color:var(--safe)">● LIVE</span>
+        </div>
+        <div class="activity-feed" id="activity-feed">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+
+      <!-- Quick stats -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">SYSTEM STATUS</div>
+        </div>
+        <div class="quick-stat-row"><span class="qs-label">VIRUSTOTAL API</span><span class="qs-val" style="color:var(--safe)">ONLINE</span></div>
+        <div class="quick-stat-row"><span class="qs-label">AI ENGINE</span><span class="qs-val" style="color:var(--safe)">ONLINE</span></div>
+        <div class="quick-stat-row"><span class="qs-label">HASH REGISTRY</span><span class="qs-val" style="color:var(--warn)">COMING SOON</span></div>
+        <div class="quick-stat-row"><span class="qs-label">BACKEND</span><span class="qs-val" id="backend-status" style="color:var(--muted)">CHECKING...</span></div>
+        <div class="quick-stat-row"><span class="qs-label">API PLAN</span><span class="qs-val">FREE TIER</span></div>
+        <div class="quick-stat-row"><span class="qs-label">SCANS REMAINING</span><span class="qs-val" style="color:var(--accent)">500 / DAY</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+injectNav('dashboard');
+
+// ── Date header ───────────────────────────────────────────────────────────
+const now = new Date();
+document.getElementById('dash-date').textContent =
+  now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}).toUpperCase();
+
+// ── Mock scan data ────────────────────────────────────────────────────────
+// In production, replace this with a real fetch to your backend's /scans endpoint.
+const MOCK_SCANS = [
+  { id:1, target:'payroll_tool_v3.exe',   type:'FILE', score:94, status:'high',   time:'2 min ago'  },
+  { id:2, target:'https://vendor-api.io',  type:'URL',  score:12, status:'auto',   time:'18 min ago' },
+  { id:3, target:'setup_installer.msi',    type:'FILE', score:61, status:'review', time:'1 hr ago'   },
+  { id:4, target:'https://dash.saas.com',  type:'URL',  score:8,  status:'auto',   time:'2 hr ago'   },
+  { id:5, target:'adobe_patch_2024.exe',   type:'FILE', score:21, status:'auto',   time:'3 hr ago'   },
+  { id:6, target:'cracked_office.zip',     type:'FILE', score:99, status:'high',   time:'5 hr ago'   },
+  { id:7, target:'https://internal.corp',  type:'URL',  score:5,  status:'auto',   time:'6 hr ago'   },
+  { id:8, target:'legacy_driver_x64.exe',  type:'FILE', score:44, status:'review', time:'Yesterday'  },
+];
+
+const KPI = { total:247, auto:182, review:47, high:18 };
+
+// ── Score color helper ────────────────────────────────────────────────────
+function scoreColor(score){ return score>=70?'var(--danger)':score>=35?'var(--warn)':'var(--safe)'; }
+function statusClass(s){ return s==='auto'?'status-auto':s==='review'?'status-review':'status-high'; }
+function statusLabel(s){ return s==='auto'?'AUTO-RESOLVED':s==='review'?'PENDING REVIEW':'HIGH RISK'; }
+
+// ── Render KPIs ───────────────────────────────────────────────────────────
+function renderKPIs(){
+  document.getElementById('kpi-total').textContent  = KPI.total;
+  document.getElementById('kpi-auto').textContent   = KPI.auto;
+  document.getElementById('kpi-review').textContent = KPI.review;
+  document.getElementById('kpi-high').textContent   = KPI.high;
+  document.getElementById('kpi-total-d').textContent  = `↑ 12% vs last month`;
+  document.getElementById('kpi-auto-d').textContent   = `↑ ${Math.round(KPI.auto/KPI.total*100)}% auto-resolve rate`;
+  document.getElementById('kpi-review-d').textContent = `${KPI.review} awaiting analyst`;
+  document.getElementById('kpi-high-d').textContent   = `↑ 3 new this week`;
+}
+
+// ── Render table ──────────────────────────────────────────────────────────
+let currentFilter = 'all';
+function renderTable(scans){
+  const tbody = document.getElementById('scan-tbody');
+  const filtered = currentFilter === 'all' ? scans : scans.filter(s => s.status === currentFilter);
+
+  if(!filtered.length){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">No scans match this filter.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(s => `
+    <tr>
+      <td class="td-target">
+        <div class="td-target-name">${s.target}</div>
+        <div class="td-target-type">${s.type}</div>
+      </td>
+      <td>
+        <div class="score-pill">
+          <div class="score-dot" style="background:${scoreColor(s.score)}"></div>
+          <span style="color:${scoreColor(s.score)}">${s.score}</span>
+          <span style="color:var(--muted);font-size:10px">/100</span>
+        </div>
+      </td>
+      <td><span class="status-badge ${statusClass(s.status)}">${statusLabel(s.status)}</span></td>
+      <td class="td-time">${s.time}</td>
+      <td class="td-action"><a href="portal.html">Re-scan →</a></td>
+    </tr>
+  `).join('');
+}
+
+function filterScans(f, btn){
+  currentFilter = f;
+  document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable(MOCK_SCANS);
+}
+
+// ── Render bar chart ──────────────────────────────────────────────────────
+function renderChart(){
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const data = [
+    {clean:12,review:4,high:1},
+    {clean:18,review:6,high:2},
+    {clean:9, review:3,high:0},
+    {clean:22,review:8,high:3},
+    {clean:15,review:5,high:1},
+    {clean:6, review:2,high:0},
+    {clean:11,review:3,high:2},
+  ];
+  const maxTotal = Math.max(...data.map(d=>d.clean+d.review+d.high));
+  const maxH = 72;
+
+  document.getElementById('chart-bars').innerHTML = data.map((d,i)=>{
+    const total = d.clean+d.review+d.high;
+    const scale = maxH/maxTotal;
+    return `
+      <div class="chart-bar-wrap">
+        <div style="display:flex;flex-direction:column-reverse;gap:1px;width:100%;height:${maxH}px">
+          <div class="chart-bar" style="height:${d.clean*scale}px;background:var(--safe);opacity:0.8"></div>
+          <div class="chart-bar" style="height:${d.review*scale}px;background:var(--warn);opacity:0.8"></div>
+          <div class="chart-bar" style="height:${d.high*scale}px;background:var(--danger);opacity:0.8"></div>
+        </div>
+        <div class="chart-label">${days[i]}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Activity feed ─────────────────────────────────────────────────────────
+function renderActivity(){
+  const feed = [
+    {icon:'✓', cls:'safe',   name:'vendor-portal.io',     meta:'Score 14 · AUTO-RESOLVED · 2m ago'},
+    {icon:'!', cls:'warn',   name:'setup_v2_signed.msi',  meta:'Score 58 · ASSIGNED TO ANALYST · 18m ago'},
+    {icon:'✕', cls:'danger', name:'cracked_office.zip',   meta:'Score 99 · HIGH RISK ESCALATED · 1h ago'},
+    {icon:'✓', cls:'safe',   name:'https://api.stripe.com',meta:'Score 3 · AUTO-RESOLVED · 2h ago'},
+    {icon:'!', cls:'warn',   name:'legacy_driver.exe',    meta:'Score 44 · ASSIGNED TO ANALYST · 3h ago'},
+  ];
+  document.getElementById('activity-feed').innerHTML = feed.map(f=>`
+    <div class="activity-item">
+      <div class="act-icon ${f.cls}">${f.icon}</div>
+      <div class="act-body">
+        <div class="act-name">${f.name}</div>
+        <div class="act-meta">${f.meta}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Backend health check ──────────────────────────────────────────────────
+async function checkBackend(){
+  const el = document.getElementById('backend-status');
+  try {
+    // 🔧 DEPLOYMENT: Replace this URL with your Render backend URL after Step 3
+    const r = await fetch('https://YOUR-APP-NAME.onrender.com/health', {signal: AbortSignal.timeout(2000)});
+    if(r.ok){
+      el.textContent='ONLINE'; el.style.color='var(--safe)';
+    } else {
+      el.textContent='ERROR'; el.style.color='var(--danger)';
+    }
+  } catch {
+    el.textContent='OFFLINE'; el.style.color='var(--danger)';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+renderKPIs();
+renderTable(MOCK_SCANS);
+renderChart();
+renderActivity();
+checkBackend();
+
+// Animate KPIs counting up
+function countUp(el, target, duration=1200){
+  let start = 0;
+  const step = target/( duration/16);
+  const timer = setInterval(()=>{
+    start = Math.min(start+step, target);
+    el.textContent = Math.round(start);
+    if(start>=target) clearInterval(timer);
+  },16);
+}
+setTimeout(()=>{
+  countUp(document.getElementById('kpi-total'),  KPI.total);
+  countUp(document.getElementById('kpi-auto'),   KPI.auto);
+  countUp(document.getElementById('kpi-review'), KPI.review);
+  countUp(document.getElementById('kpi-high'),   KPI.high);
+},200);
+</script>
+</body>
+</html>

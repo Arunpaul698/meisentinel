@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Scan — SecureCheck SSA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0c0f;--s1:#0e1115;--s2:#111418;
+  --border:#1e242c;--border2:#2a3340;
+  --text:#c8d0da;--muted:#5a6672;
+  --accent:#00d4ff;--a2:#00b8d9;
+  --safe:#00c96e;--warn:#ff9500;--danger:#ff3b30;
+  --mono:'IBM Plex Mono',monospace;
+  --display:'Syne',sans-serif;
+  --body:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;display:flex;flex-direction:column}
+
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);pointer-events:none;z-index:500}
+
+/* ── LAYOUT ──────────────────────────────────────────────────────────────── */
+.portal-wrap {
+  flex:1; max-width:1120px; margin:0 auto; width:100%;
+  padding:40px 32px 80px;
+}
+
+.portal-head {
+  margin-bottom:32px;
+  display:flex; justify-content:space-between; align-items:flex-end;
+  padding-bottom:24px; border-bottom:1px solid var(--border);
+}
+.portal-title   { font-family:var(--display); font-size:26px; font-weight:800; color:#fff; }
+.portal-caption { font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:4px; letter-spacing:0.08em; }
+.portal-breadcrumb {
+  font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:0.1em;
+  display:flex; gap:8px; align-items:center;
+}
+.portal-breadcrumb a { color:var(--accent); text-decoration:none; }
+.portal-breadcrumb a:hover { color:var(--a2); }
+
+/* ── TWO-COL GRID ─────────────────────────────────────────────────────────── */
+.scan-grid { display:grid; grid-template-columns:380px 1fr; gap:20px; }
+
+/* ── LEFT PANEL ──────────────────────────────────────────────────────────── */
+.left { display:flex; flex-direction:column; gap:16px; }
+
+.card { background:var(--s2); border:1px solid var(--border); }
+.card-head { padding:14px 18px; border-bottom:1px solid var(--border); }
+.card-label { font-family:var(--mono); font-size:9px; letter-spacing:0.15em; color:var(--muted); }
+.card-body  { padding:18px; }
+
+/* tabs */
+.tabs { display:flex; border:1px solid var(--border); }
+.tab  { flex:1; padding:11px 8px; text-align:center; cursor:pointer; font-family:var(--mono); font-size:11px; letter-spacing:0.06em; color:var(--muted); background:transparent; border:none; transition:all 0.15s; }
+.tab.active { background:var(--accent); color:#0a0c0f; font-weight:700; }
+.tab:not(.active):hover { color:var(--text); background:rgba(255,255,255,0.03); }
+
+/* drop zone */
+.drop-zone {
+  border:1px dashed var(--border2); padding:36px 20px; text-align:center;
+  cursor:pointer; transition:all 0.2s; position:relative;
+}
+.drop-zone:hover,.drop-zone.over { border-color:var(--accent); background:rgba(0,212,255,.03); }
+.drop-zone input[type=file] { position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%; }
+.drop-icon { font-size:26px; margin-bottom:10px; opacity:0.4; }
+.drop-text { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:2; }
+.drop-text span { color:var(--accent); }
+.file-chosen { font-family:var(--mono); font-size:10px; color:var(--accent); margin-top:8px; word-break:break-all; }
+
+/* url input */
+.url-row { display:flex; border:1px solid var(--border2); }
+.url-pre  { padding:12px 14px; font-family:var(--mono); font-size:11px; color:var(--muted); background:rgba(255,255,255,0.02); border-right:1px solid var(--border2); white-space:nowrap; }
+.url-input { flex:1; background:transparent; border:none; outline:none; padding:12px 14px; font-family:var(--mono); font-size:12px; color:var(--text); }
+.url-input::placeholder { color:var(--muted); }
+
+/* scan button */
+.scan-btn {
+  width:100%; padding:15px; background:var(--accent); color:#0a0c0f;
+  border:none; font-family:var(--mono); font-size:13px; font-weight:700;
+  letter-spacing:0.1em; cursor:pointer; transition:all 0.15s;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%);
+}
+.scan-btn:hover:not(:disabled){background:var(--a2);}
+.scan-btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* error */
+.err-box { padding:12px 16px; border:1px solid var(--danger); background:rgba(255,59,48,.06); font-family:var(--mono); font-size:11px; color:var(--danger); display:none; }
+.err-box.show{display:block;}
+
+/* tier sidebar */
+.tier-list { display:flex; flex-direction:column; }
+.tier-item { display:flex; gap:12px; padding:13px 18px; border-bottom:1px solid var(--border); align-items:flex-start; }
+.tier-item:last-child{border-bottom:none;}
+.tier-badge { font-family:var(--mono); font-size:8px; letter-spacing:0.12em; padding:3px 7px; border:1px solid rgba(0,212,255,.25); background:rgba(0,212,255,.07); color:var(--accent); white-space:nowrap; margin-top:2px; }
+.tier-body {}
+.tier-name { font-family:var(--mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:2px; }
+.tier-desc { font-family:var(--body); font-size:11px; color:var(--muted); line-height:1.5; }
+
+/* ── RIGHT PANEL — STATES ────────────────────────────────────────────────── */
+.right { position:relative; }
+
+/* IDLE */
+.state-idle {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  height:100%; min-height:400px; gap:12px;
+  border:1px solid var(--border); background:var(--s2);
+}
+.idle-glyph { font-size:52px; opacity:0.12; }
+.idle-text  { font-family:var(--mono); font-size:12px; color:var(--muted); text-align:center; line-height:2; }
+
+/* LOADING */
+.state-loading {
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  height:100%; min-height:400px; gap:24px;
+  border:1px solid var(--border); background:var(--s2);
+}
+.state-loading.show{display:flex;}
+
+.spinner { position:relative; width:64px; height:64px; }
+.spinner-ring {
+  position:absolute;inset:0;
+  border-radius:50%; border:2px solid transparent;
+}
+.spinner-ring-1 { border-top-color:var(--accent); animation:spin1 1s linear infinite; }
+.spinner-ring-2 { border-right-color:rgba(0,212,255,.3); animation:spin2 1.4s linear infinite reverse; inset:6px; }
+@keyframes spin1{to{transform:rotate(360deg)}}
+@keyframes spin2{to{transform:rotate(360deg)}}
+
+.loading-steps { display:flex; flex-direction:column; gap:7px; align-items:center; }
+.loading-step  { font-family:var(--mono); font-size:11px; color:var(--muted); display:flex; gap:8px; align-items:center; opacity:0; animation:stepIn .4s forwards; }
+@keyframes stepIn{to{opacity:1}}
+.loading-step .ls-arrow { color:var(--accent); }
+
+/* RESULT */
+.state-result { display:none; flex-direction:column; gap:16px; }
+.state-result.show { display:flex; }
+
+/* result header card */
+.result-hero {
+  background:var(--s2); border:1px solid var(--border); padding:28px;
+  display:flex; align-items:flex-start; gap:24px;
+}
+.rh-left { flex:1; min-width:0; }
+.rh-target-label { font-family:var(--mono); font-size:9px; letter-spacing:0.15em; color:var(--muted); margin-bottom:6px; }
+.rh-target-name  { font-family:var(--mono); font-size:15px; color:var(--text); word-break:break-all; margin-bottom:12px; }
+
+.score-bar-track { height:5px; background:var(--border2); }
+.score-bar-fill  { height:100%; transition:width 1.2s cubic-bezier(.4,0,.2,1); }
+.score-bar-labs  { display:flex; justify-content:space-between; font-family:var(--mono); font-size:9px; color:var(--muted); margin-top:4px; }
+
+.rh-right { text-align:right; flex-shrink:0; }
+.score-big { font-family:var(--display); font-size:64px; font-weight:800; line-height:1; }
+.score-label { font-family:var(--mono); font-size:10px; letter-spacing:0.14em; font-weight:700; margin-top:4px; }
+
+/* stat row */
+.stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); }
+.stat-cell { background:var(--s2); padding:16px 14px; }
+.stat-val  { font-family:var(--display); font-size:30px; font-weight:800; line-height:1; }
+.stat-key  { font-family:var(--mono); font-size:9px; letter-spacing:0.12em; color:var(--muted); margin-top:4px; }
+
+/* summary */
+.summary-card { background:var(--s2); border:1px solid var(--border); }
+.summary-body { padding:20px; font-size:13px; line-height:1.8; color:var(--text); border-left:2px solid var(--accent); margin:0 0 0 0; }
+
+/* hash */
+.hash-card { display:flex; gap:12px; align-items:center; padding:12px 18px; background:var(--s2); border:1px solid var(--border); }
+.hash-label { font-family:var(--mono); font-size:9px; letter-spacing:0.12em; color:var(--muted); white-space:nowrap; }
+.hash-val   { font-family:var(--mono); font-size:10px; color:var(--a2); word-break:break-all; }
+
+/* verdict */
+.verdict-card { padding:20px 24px; border:1px solid; }
+.verdict-title { font-family:var(--mono); font-size:9px; letter-spacing:0.14em; color:var(--muted); margin-bottom:6px; }
+.verdict-main  { font-family:var(--mono); font-size:14px; font-weight:700; }
+.verdict-desc  { font-family:var(--body); font-size:12px; color:var(--muted); margin-top:4px; }
+
+/* action buttons */
+.result-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.btn-pdf   { padding:11px 22px; background:transparent; border:1px solid var(--accent); color:var(--accent); font-family:var(--mono); font-size:11px; font-weight:700; cursor:pointer; letter-spacing:0.08em; transition:all .15s; }
+.btn-pdf:hover:not(:disabled) { background:rgba(0,212,255,.1); }
+.btn-pdf:disabled{opacity:.4;cursor:not-allowed;}
+.btn-reset { padding:11px 22px; background:transparent; border:1px solid var(--border2); color:var(--muted); font-family:var(--mono); font-size:11px; cursor:pointer; letter-spacing:0.08em; transition:all .15s; }
+.btn-reset:hover { border-color:var(--text); color:var(--text); }
+.pdf-status { font-family:var(--mono); font-size:10px; color:var(--safe); }
+
+/* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
+@media(max-width:900px){
+  .scan-grid{grid-template-columns:1fr;}
+  .portal-wrap{padding:24px 16px 60px;}
+  .portal-head{flex-direction:column;gap:10px;}
+}
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+
+<div class="portal-wrap">
+
+  <div class="portal-head">
+    <div>
+      <div class="portal-title">Security Scan</div>
+      <div class="portal-caption">SUBMIT A FILE OR URL · AI-POWERED RISK ASSESSMENT</div>
+    </div>
+    <div class="portal-breadcrumb">
+      <a href="dashboard.html">Dashboard</a>
+      <span>›</span>
+      <span style="color:var(--text)">New Scan</span>
+    </div>
+  </div>
+
+  <div class="scan-grid">
+
+    <!-- LEFT: input controls -->
+    <div class="left">
+
+      <!-- Target type -->
+      <div class="card">
+        <div class="card-head"><div class="card-label">SCAN TARGET</div></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:14px;">
+          <div class="tabs">
+            <button class="tab active" onclick="switchTab('file',this)">📁 &nbsp;FILE</button>
+            <button class="tab" onclick="switchTab('url',this)">🌐 &nbsp;URL / DOMAIN</button>
+          </div>
+
+          <!-- File -->
+          <div id="sec-file">
+            <div class="drop-zone" id="drop-zone">
+              <input type="file" id="file-input" onchange="onFileSelect(event)"/>
+              <div class="drop-icon">⬆</div>
+              <div class="drop-text">Drop here or <span>browse</span><br/>.exe · .msi · .zip · .dll · any</div>
+              <div class="file-chosen" id="file-chosen"></div>
+            </div>
+          </div>
+
+          <!-- URL -->
+          <div id="sec-url" style="display:none;">
+            <div class="url-row">
+              <div class="url-pre">TARGET</div>
+              <input class="url-input" id="url-input" type="text" placeholder="https://example.com"/>
+            </div>
+          </div>
+
+          <div class="err-box" id="err-box"></div>
+
+          <button class="scan-btn" id="scan-btn" onclick="runScan()">
+            ▶ &nbsp; INITIATE SCAN
+          </button>
+        </div>
+      </div>
+
+      <!-- Pipeline tiers -->
+      <div class="card">
+        <div class="card-head"><div class="card-label">ASSESSMENT PIPELINE</div></div>
+        <div class="tier-list">
+          <div class="tier-item">
+            <div class="tier-badge">T-1</div>
+            <div class="tier-body"><div class="tier-name">Hash Registry</div><div class="tier-desc">Instant lookup for previously cleared files</div></div>
+          </div>
+          <div class="tier-item">
+            <div class="tier-badge">T-2</div>
+            <div class="tier-body"><div class="tier-name">VirusTotal Scan</div><div class="tier-desc">70+ AV engines in parallel · 8–12 min</div></div>
+          </div>
+          <div class="tier-item">
+            <div class="tier-badge">T-3</div>
+            <div class="tier-body"><div class="tier-name">AI Analysis</div><div class="tier-desc">LLM confidence score + draft report</div></div>
+          </div>
+          <div class="tier-item">
+            <div class="tier-badge">T-4</div>
+            <div class="tier-body"><div class="tier-name">Analyst Review</div><div class="tier-desc">Escalated for high-risk or ambiguous cases</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: states -->
+    <div class="right">
+
+      <!-- Idle -->
+      <div class="state-idle" id="state-idle">
+        <div class="idle-glyph">🛡</div>
+        <div class="idle-text">Submit a file or URL to<br/>begin your assessment</div>
+      </div>
+
+      <!-- Loading -->
+      <div class="state-loading" id="state-loading">
+        <div class="spinner">
+          <div class="spinner-ring spinner-ring-1"></div>
+          <div class="spinner-ring spinner-ring-2"></div>
+        </div>
+        <div class="loading-steps" id="loading-steps"></div>
+      </div>
+
+      <!-- Result -->
+      <div class="state-result" id="state-result">
+
+        <!-- score hero -->
+        <div class="result-hero">
+          <div class="rh-left">
+            <div class="rh-target-label">ASSESSED TARGET</div>
+            <div class="rh-target-name" id="r-target">—</div>
+            <div class="score-bar-track">
+              <div class="score-bar-fill" id="r-bar" style="width:0%"></div>
+            </div>
+            <div class="score-bar-labs"><span>0 · CLEAN</span><span>RISK SCORE</span><span>100 · CRITICAL</span></div>
+          </div>
+          <div class="rh-right">
+            <div class="score-big" id="r-score">—</div>
+            <div class="score-label" id="r-label">—</div>
+          </div>
+        </div>
+
+        <!-- engine stats -->
+        <div class="stat-row">
+          <div class="stat-cell">
+            <div class="stat-val" id="r-malicious"  style="color:var(--danger)">0</div>
+            <div class="stat-key">MALICIOUS</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-val" id="r-suspicious" style="color:var(--warn)">0</div>
+            <div class="stat-key">SUSPICIOUS</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-val" id="r-harmless"   style="color:var(--safe)">0</div>
+            <div class="stat-key">CLEAN</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-val" id="r-undetected" style="color:var(--muted)">0</div>
+            <div class="stat-key">UNDETECTED</div>
+          </div>
+        </div>
+
+        <!-- AI summary -->
+        <div class="summary-card">
+          <div class="card-head"><div class="card-label">AI ASSESSMENT SUMMARY</div></div>
+          <div class="summary-body" id="r-summary">—</div>
+        </div>
+
+        <!-- verdict -->
+        <div class="verdict-card" id="r-verdict">
+          <div class="verdict-title">ROUTING VERDICT</div>
+          <div class="verdict-main" id="r-verdict-main">—</div>
+          <div class="verdict-desc" id="r-verdict-desc">—</div>
+        </div>
+
+        <!-- hash -->
+        <div class="hash-card" id="r-hash-card" style="display:none;">
+          <div class="hash-label">SHA-256</div>
+          <div class="hash-val" id="r-hash">—</div>
+        </div>
+
+        <!-- actions -->
+        <div class="result-actions">
+          <button class="btn-reset" onclick="resetUI()">↩ New Scan</button>
+          <button class="btn-pdf" id="pdf-btn" onclick="downloadPDF()">⬇ Download PDF Report</button>
+          <span class="pdf-status" id="pdf-status"></span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+injectNav('portal');
+
+// 🔧 DEPLOYMENT: Replace this URL with your Render backend URL after Step 3
+const BACKEND = 'https://YOUR-APP-NAME.onrender.com';
+let tab = 'file', selectedFile = null, lastScan = null, scanStart = null;
+
+// ── Tab ───────────────────────────────────────────────────────────────────
+function switchTab(t, btn){
+  tab = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sec-file').style.display = t==='file' ? '' : 'none';
+  document.getElementById('sec-url').style.display  = t==='url'  ? '' : 'none';
+  clearErr();
+}
+
+// ── File select ───────────────────────────────────────────────────────────
+function onFileSelect(e){
+  selectedFile = e.target.files[0];
+  if(selectedFile) document.getElementById('file-chosen').textContent = '✓ ' + selectedFile.name;
+}
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', ()=> dz.classList.remove('over'));
+dz.addEventListener('drop', e=>{
+  e.preventDefault(); dz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if(f){ selectedFile=f; document.getElementById('file-chosen').textContent='✓ '+f.name; }
+});
+
+// ── States ────────────────────────────────────────────────────────────────
+function showLoading(){
+  document.getElementById('state-idle').style.display    = 'none';
+  document.getElementById('state-result').classList.remove('show');
+  document.getElementById('state-loading').classList.add('show');
+
+  const steps = ['Computing SHA-256 hash…','Submitting to VirusTotal…','Waiting for engine consensus…','Running AI analysis…','Generating report…'];
+  const container = document.getElementById('loading-steps');
+  container.innerHTML = '';
+  steps.forEach((s,i)=>{
+    const el = document.createElement('div');
+    el.className='loading-step';
+    el.style.animationDelay = `${i*1.7}s`;
+    el.innerHTML=`<span class="ls-arrow">›</span> ${s}`;
+    container.appendChild(el);
+  });
+}
+
+function showResult(data){
+  document.getElementById('state-loading').classList.remove('show');
+  lastScan = data;
+
+  const score = data.risk_score;
+  const color = data.risk_color;
+
+  // score hero
+  document.getElementById('r-target').textContent = data.target;
+  document.getElementById('r-score').textContent  = score;
+  document.getElementById('r-score').style.color  = color;
+  document.getElementById('r-label').textContent  = data.risk_label;
+  document.getElementById('r-label').style.color  = color;
+
+  const bar = document.getElementById('r-bar');
+  bar.style.background = color;
+  setTimeout(()=> bar.style.width = score+'%', 60);
+
+  // stats
+  const s = data.vt_stats || {};
+  document.getElementById('r-malicious').textContent  = s.malicious  ?? 0;
+  document.getElementById('r-suspicious').textContent = s.suspicious ?? 0;
+  document.getElementById('r-harmless').textContent   = s.harmless   ?? 0;
+  document.getElementById('r-undetected').textContent = s.undetected ?? 0;
+
+  // summary
+  document.getElementById('r-summary').textContent = data.summary;
+
+  // verdict
+  let vMain, vDesc, vBorder, vBg;
+  if(score >= 85){
+    vMain='AUTO-RESOLVED'; vDesc='File cleared. Ticket closed. Hash saved to registry.';
+    vBorder='var(--safe)'; vBg='rgba(0,201,110,0.07)';
+  } else if(score >= 50){
+    vMain='ASSIGNED FOR ANALYST REVIEW'; vDesc='Draft report sent to Tier 4 team. Awaiting sign-off.';
+    vBorder='var(--warn)'; vBg='rgba(255,149,0,0.07)';
+  } else {
+    vMain='HIGH RISK — ESCALATED'; vDesc='Flagged immediately. Specialist team notified.';
+    vBorder='var(--danger)'; vBg='rgba(255,59,48,0.07)';
+  }
+  const vc = document.getElementById('r-verdict');
+  vc.style.borderColor = vBorder; vc.style.background = vBg;
+  document.getElementById('r-verdict-main').textContent = vMain;
+  document.getElementById('r-verdict-main').style.color = vBorder;
+  document.getElementById('r-verdict-desc').textContent = vDesc;
+
+  // hash
+  const hc = document.getElementById('r-hash-card');
+  if(data.sha256){ hc.style.display='flex'; document.getElementById('r-hash').textContent = data.sha256; }
+  else { hc.style.display='none'; }
+
+  document.getElementById('state-result').classList.add('show');
+}
+
+function resetUI(){
+  lastScan = null; selectedFile = null;
+  document.getElementById('state-result').classList.remove('show');
+  document.getElementById('state-idle').style.display = '';
+  document.getElementById('scan-btn').disabled = false;
+  document.getElementById('file-chosen').textContent = '';
+  document.getElementById('url-input').value = '';
+  document.getElementById('r-bar').style.width = '0%';
+  clearErr();
+}
+
+function showErr(msg){
+  document.getElementById('state-loading').classList.remove('show');
+  document.getElementById('state-idle').style.display = '';
+  document.getElementById('scan-btn').disabled = false;
+  const el = document.getElementById('err-box');
+  el.textContent = '⚠ ' + msg; el.classList.add('show');
+}
+function clearErr(){ document.getElementById('err-box').classList.remove('show'); }
+
+// ── Run scan ──────────────────────────────────────────────────────────────
+async function runScan(){
+  clearErr(); scanStart = Date.now();
+
+  if(tab === 'file'){
+    if(!selectedFile){ showErr('Select a file to scan.'); return; }
+    document.getElementById('scan-btn').disabled = true;
+    showLoading();
+    const fd = new FormData(); fd.append('file', selectedFile);
+    try {
+      const r = await fetch(`${BACKEND}/scan/file`, {method:'POST', body:fd});
+      if(!r.ok){ const e=await r.json(); throw new Error(e.detail||'Scan failed'); }
+      showResult(await r.json());
+    } catch(e){ showErr(e.message); }
+
+  } else {
+    let url = document.getElementById('url-input').value.trim();
+    if(!url){ showErr('Enter a URL to scan.'); return; }
+    if(!url.startsWith('http')) url = 'https://'+url;
+    document.getElementById('scan-btn').disabled = true;
+    showLoading();
+    const fd = new FormData(); fd.append('url', url);
+    try {
+      const r = await fetch(`${BACKEND}/scan/url`, {method:'POST', body:fd});
+      if(!r.ok){ const e=await r.json(); throw new Error(e.detail||'Scan failed'); }
+      showResult(await r.json());
+    } catch(e){ showErr(e.message); }
+  }
+}
+
+// ── PDF download ──────────────────────────────────────────────────────────
+async function downloadPDF(){
+  if(!lastScan) return;
+  const btn=document.getElementById('pdf-btn'), st=document.getElementById('pdf-status');
+  btn.disabled=true; btn.textContent='⏳ Generating…'; st.textContent='';
+  try {
+    const r = await fetch(`${BACKEND}/report/pdf`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lastScan)});
+    if(!r.ok) throw new Error('Generation failed');
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `SSA_Report_${lastScan.target.replace(/[^a-zA-Z0-9._-]/g,'_').substring(0,40)}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    st.textContent='✓ Downloaded'; setTimeout(()=>st.textContent='',3000);
+  } catch(e){
+    st.style.color='var(--danger)'; st.textContent='⚠ Failed — backend offline?';
+    setTimeout(()=>{st.textContent='';st.style.color='var(--safe)';},4000);
+  } finally { btn.disabled=false; btn.textContent='⬇ Download PDF Report'; }
+}
+
+// Enter key on URL
+document.getElementById('url-input').addEventListener('keydown', e=>{ if(e.key==='Enter') runScan(); });
+</script>
+</body>
+</html>
