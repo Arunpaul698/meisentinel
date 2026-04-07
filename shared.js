@@ -1,18 +1,16 @@
-// ── SSA App — Shared shell, nav, and design tokens ──────────────────────────
+// ── Meisentis — Shared shell, nav, and design tokens ────────────────────────
 // Include this script in every page. It injects the nav and applies global CSS.
 
-// 🔧 DEPLOYMENT: After Netlify deploy, replace '' with your Netlify base URL.
-// Example: 'https://securecheck.netlify.app'
-// Leave as '' to use relative paths (works fine for local file:// browsing).
 const BASE_URL = '';
+const BACKEND  = 'https://meisentinel.onrender.com';
 
 const NAV_HTML = `
 <nav class="ssa-nav">
   <a class="nav-logo" href="${BASE_URL}landing.html">
-    <div class="nav-logomark">SSA</div>
+    <div class="nav-logomark">M</div>
     <div class="nav-logotype">
-      <span class="nav-logotype-main">SecureCheck</span>
-      <span class="nav-logotype-sub">by SSA Agent</span>
+      <span class="nav-logotype-main">Meisentis</span>
+      <span class="nav-logotype-sub">The Truth Sentinel</span>
     </div>
   </a>
   <div class="nav-links">
@@ -40,7 +38,7 @@ const NAV_CSS = `
   .nav-logomark {
     width:32px; height:32px; border:1.5px solid #00d4ff;
     display:grid; place-items:center;
-    font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700;
+    font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:700;
     color:#00d4ff; letter-spacing:-0.5px;
     box-shadow: 0 0 10px rgba(0,212,255,0.15);
   }
@@ -67,21 +65,17 @@ const NAV_CSS = `
 `;
 
 function injectNav(activePage) {
-  // Inject CSS
   const style = document.createElement('style');
   style.textContent = NAV_CSS;
   document.head.appendChild(style);
 
-  // Inject nav
   const nav = document.createElement('div');
   nav.innerHTML = NAV_HTML;
   document.body.prepend(nav.firstElementChild);
 
-  // Mark active link
   document.querySelectorAll('.nav-link').forEach(a => {
     if (a.dataset.page === activePage) a.classList.add('active');
   });
 
-  // Push body content below nav
   document.body.style.paddingTop = '56px';
 }
