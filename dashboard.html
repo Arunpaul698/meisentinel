@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Dashboard — SecureCheck SSA</title>
+<title>Dashboard — Meisentis</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -453,7 +453,7 @@ async function checkBackend(){
   const el = document.getElementById('backend-status');
   try {
     // 🔧 DEPLOYMENT: Replace this URL with your Render backend URL after Step 3
-    const r = await fetch('https://YOUR-APP-NAME.onrender.com/health', {signal: AbortSignal.timeout(2000)});
+    const r = await fetch('https://meisentinel.onrender.com/health', {signal: AbortSignal.timeout(2000)});
     if(r.ok){
       el.textContent='ONLINE'; el.style.color='var(--safe)';
     } else {
