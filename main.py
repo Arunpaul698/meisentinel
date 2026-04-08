@@ -5,9 +5,7 @@ import asyncio
 import json
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
-from typing import Optional
+from fastapi.responses import Response
 from pdf_report import generate_pdf
 
 app = FastAPI(title="SSA Agent MVP")
@@ -23,42 +21,51 @@ VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
 VT_BASE = "https://www.virustotal.com/api/v3"
 
+
+# ── VirusTotal ────────────────────────────────────────────────────────────────
+
+async def vt_poll(client, analysis_id: str) -> dict:
+    """Poll a VT analysis until completed, return stats."""
+    headers = {"x-apikey": VIRUSTOTAL_API_KEY}
+    for _ in range(24):          # up to 2 min
+        await asyncio.sleep(5)
+        r = await client.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers)
+        r.raise_for_status()
+        data = r.json()["data"]
+        if data["attributes"]["status"] == "completed":
+            return data["attributes"]["stats"]
+    return {}
+
+
 async def vt_scan_file(file_bytes: bytes, filename: str) -> dict:
     headers = {"x-apikey": VIRUSTOTAL_API_KEY}
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
             f"{VT_BASE}/files",
             headers=headers,
-            files={"file": (filename, file_bytes)}
+            files={"file": (filename, file_bytes)},
         )
         resp.raise_for_status()
         analysis_id = resp.json()["data"]["id"]
-        for _ in range(18):
-            await asyncio.sleep(5)
-            r = await client.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers)
-            r.raise_for_status()
-            data = r.json()["data"]
-            if data["attributes"]["status"] == "completed":
-                return data["attributes"]["stats"]
-    return {}
+        return await vt_poll(client, analysis_id)
+
 
 async def vt_scan_url(url: str) -> dict:
-    headers = {
-        "x-apikey": VIRUSTOTAL_API_KEY,
-        "content-type": "application/x-www-form-urlencoded"
-    }
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{VT_BASE}/urls", headers=headers, data=f"url={url}")
+    headers = {"x-apikey": VIRUSTOTAL_API_KEY}
+    async with httpx.AsyncClient(timeout=120) as client:
+        # Step 1: submit URL
+        resp = await client.post(
+            f"{VT_BASE}/urls",
+            headers=headers,
+            data={"url": url},          # form-encoded, not raw string
+        )
         resp.raise_for_status()
         analysis_id = resp.json()["data"]["id"]
-        for _ in range(18):
-            await asyncio.sleep(5)
-            r = await client.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers)
-            r.raise_for_status()
-            data = r.json()["data"]
-            if data["attributes"]["status"] == "completed":
-                return data["attributes"]["stats"]
-    return {}
+        # Step 2: poll for result
+        return await vt_poll(client, analysis_id)
+
+
+# ── Risk scoring ──────────────────────────────────────────────────────────────
 
 def compute_risk_score(vt_stats: dict) -> int:
     malicious  = vt_stats.get("malicious", 0)
@@ -67,12 +74,16 @@ def compute_risk_score(vt_stats: dict) -> int:
     raw = (malicious / total * 80) + (suspicious / total * 20)
     return min(100, round(raw * 100))
 
+
 def risk_label(score: int) -> tuple:
     if score >= 70:
         return "HIGH RISK", "#ff3b30"
     elif score >= 35:
         return "MEDIUM RISK", "#ff9500"
     return "LOW RISK", "#34c759"
+
+
+# ── Claude AI summary ─────────────────────────────────────────────────────────
 
 async def llm_summary(target: str, vt_stats: dict, score: int) -> str:
     if not ANTHROPIC_API_KEY:
@@ -88,12 +99,6 @@ async def llm_summary(target: str, vt_stats: dict, score: int) -> str:
         f"Do not use bullet points. Plain paragraph only."
     )
 
-    payload = {
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 300,
-        "messages": [{"role": "user", "content": prompt}]
-    }
-
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -101,30 +106,37 @@ async def llm_summary(target: str, vt_stats: dict, score: int) -> str:
                 headers={
                     "x-api-key": ANTHROPIC_API_KEY,
                     "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
+                    "content-type": "application/json",
                 },
-                json=payload,
+                json={
+                    "model": "claude-haiku-4-5",
+                    "max_tokens": 300,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
             )
             resp.raise_for_status()
             return resp.json()["content"][0]["text"]
 
     except httpx.HTTPStatusError as e:
-        print(f"[Claude API error] {e.response.status_code}: {e.response.text}")
+        print(f"[Claude error] {e.response.status_code}: {e.response.text}")
         return (
             f"AI summary temporarily unavailable (API error {e.response.status_code}). "
             f"Risk score: {score}/100. "
-            f"VirusTotal flagged {vt_stats.get('malicious', 0)} engines as malicious "
-            f"and {vt_stats.get('suspicious', 0)} as suspicious out of "
-            f"{sum(vt_stats.values())} total."
+            f"VirusTotal flagged {vt_stats.get('malicious', 0)} malicious "
+            f"and {vt_stats.get('suspicious', 0)} suspicious out of "
+            f"{sum(vt_stats.values())} engines."
         )
     except Exception as e:
-        print(f"[Claude API error] {e}")
+        print(f"[Claude error] {e}")
         return (
             f"AI summary temporarily unavailable. "
             f"Risk score: {score}/100. "
-            f"VirusTotal flagged {vt_stats.get('malicious', 0)} malicious "
-            f"and {vt_stats.get('suspicious', 0)} suspicious detections."
+            f"VirusTotal: {vt_stats.get('malicious', 0)} malicious, "
+            f"{vt_stats.get('suspicious', 0)} suspicious."
         )
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/scan/file")
 async def scan_file(file: UploadFile = File(...)):
@@ -144,8 +156,9 @@ async def scan_file(file: UploadFile = File(...)):
         "risk_score": score,
         "risk_label": label,
         "risk_color": color,
-        "summary":    summary
+        "summary":    summary,
     }
+
 
 @app.post("/scan/url")
 async def scan_url(url: str = Form(...)):
@@ -162,8 +175,9 @@ async def scan_url(url: str = Form(...)):
         "risk_score": score,
         "risk_label": label,
         "risk_color": color,
-        "summary":    summary
+        "summary":    summary,
     }
+
 
 @app.post("/report/pdf")
 async def export_pdf(scan_data: dict):
@@ -174,10 +188,11 @@ async def export_pdf(scan_data: dict):
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except Exception as e:
         raise HTTPException(500, f"PDF generation failed: {str(e)}")
+
 
 @app.get("/health")
 def health():
