@@ -26,7 +26,11 @@ VT_BASE = "https://www.virustotal.com/api/v3"
 async def vt_scan_file(file_bytes: bytes, filename: str) -> dict:
     headers = {"x-apikey": VIRUSTOTAL_API_KEY}
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{VT_BASE}/files", headers=headers, files={"file": (filename, file_bytes)})
+        resp = await client.post(
+            f"{VT_BASE}/files",
+            headers=headers,
+            files={"file": (filename, file_bytes)}
+        )
         resp.raise_for_status()
         analysis_id = resp.json()["data"]["id"]
         for _ in range(18):
@@ -39,7 +43,10 @@ async def vt_scan_file(file_bytes: bytes, filename: str) -> dict:
     return {}
 
 async def vt_scan_url(url: str) -> dict:
-    headers = {"x-apikey": VIRUSTOTAL_API_KEY, "content-type": "application/x-www-form-urlencoded"}
+    headers = {
+        "x-apikey": VIRUSTOTAL_API_KEY,
+        "content-type": "application/x-www-form-urlencoded"
+    }
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(f"{VT_BASE}/urls", headers=headers, data=f"url={url}")
         resp.raise_for_status()
@@ -69,38 +76,94 @@ def risk_label(score: int) -> tuple:
 
 async def llm_summary(target: str, vt_stats: dict, score: int) -> str:
     if not ANTHROPIC_API_KEY:
-        return "LLM summary unavailable (no API key configured)."
-    prompt = f"""You are a software security analyst. Summarize this VirusTotal scan result in 3-4 concise sentences for a non-technical business audience.\n\nTarget: {target}\nRisk Score: {score}/100\nVirusTotal Stats: {json.dumps(vt_stats)}\n\nBe direct. State if it's safe or not, why, and what action to take. Do not use bullet points. Plain paragraph only."""
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": "claude-sonnet-4-20250514", "max_tokens": 300, "messages": [{"role": "user", "content": prompt}]},
+        return "AI summary unavailable — ANTHROPIC_API_KEY not configured on the server."
+
+    prompt = (
+        f"You are a software security analyst. Summarize this VirusTotal scan result "
+        f"in 3-4 concise sentences for a non-technical business audience.\n\n"
+        f"Target: {target}\n"
+        f"Risk Score: {score}/100\n"
+        f"VirusTotal Stats: {json.dumps(vt_stats)}\n\n"
+        f"Be direct. State if it's safe or not, why, and what action to take. "
+        f"Do not use bullet points. Plain paragraph only."
+    )
+
+    payload = {
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 300,
+        "messages": [{"role": "user", "content": prompt}]
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json"
+                },
+                json=payload,
+            )
+            resp.raise_for_status()
+            return resp.json()["content"][0]["text"]
+
+    except httpx.HTTPStatusError as e:
+        print(f"[Claude API error] {e.response.status_code}: {e.response.text}")
+        return (
+            f"AI summary temporarily unavailable (API error {e.response.status_code}). "
+            f"Risk score: {score}/100. "
+            f"VirusTotal flagged {vt_stats.get('malicious', 0)} engines as malicious "
+            f"and {vt_stats.get('suspicious', 0)} as suspicious out of "
+            f"{sum(vt_stats.values())} total."
         )
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"]
+    except Exception as e:
+        print(f"[Claude API error] {e}")
+        return (
+            f"AI summary temporarily unavailable. "
+            f"Risk score: {score}/100. "
+            f"VirusTotal flagged {vt_stats.get('malicious', 0)} malicious "
+            f"and {vt_stats.get('suspicious', 0)} suspicious detections."
+        )
 
 @app.post("/scan/file")
 async def scan_file(file: UploadFile = File(...)):
     if not VIRUSTOTAL_API_KEY:
-        raise HTTPException(400, "VIRUSTOTAL_API_KEY not set")
-    file_bytes = await file.read()
-    sha256     = hashlib.sha256(file_bytes).hexdigest()
-    vt_stats   = await vt_scan_file(file_bytes, file.filename)
-    score      = compute_risk_score(vt_stats)
+        raise HTTPException(400, "VIRUSTOTAL_API_KEY not set on server")
+    file_bytes   = await file.read()
+    sha256       = hashlib.sha256(file_bytes).hexdigest()
+    vt_stats     = await vt_scan_file(file_bytes, file.filename)
+    score        = compute_risk_score(vt_stats)
     label, color = risk_label(score)
-    summary    = await llm_summary(file.filename, vt_stats, score)
-    return {"target": file.filename, "type": "file", "sha256": sha256, "vt_stats": vt_stats, "risk_score": score, "risk_label": label, "risk_color": color, "summary": summary}
+    summary      = await llm_summary(file.filename, vt_stats, score)
+    return {
+        "target":     file.filename,
+        "type":       "file",
+        "sha256":     sha256,
+        "vt_stats":   vt_stats,
+        "risk_score": score,
+        "risk_label": label,
+        "risk_color": color,
+        "summary":    summary
+    }
 
 @app.post("/scan/url")
 async def scan_url(url: str = Form(...)):
     if not VIRUSTOTAL_API_KEY:
-        raise HTTPException(400, "VIRUSTOTAL_API_KEY not set")
-    vt_stats = await vt_scan_url(url)
-    score    = compute_risk_score(vt_stats)
+        raise HTTPException(400, "VIRUSTOTAL_API_KEY not set on server")
+    vt_stats     = await vt_scan_url(url)
+    score        = compute_risk_score(vt_stats)
     label, color = risk_label(score)
-    summary  = await llm_summary(url, vt_stats, score)
-    return {"target": url, "type": "url", "vt_stats": vt_stats, "risk_score": score, "risk_label": label, "risk_color": color, "summary": summary}
+    summary      = await llm_summary(url, vt_stats, score)
+    return {
+        "target":     url,
+        "type":       "url",
+        "vt_stats":   vt_stats,
+        "risk_score": score,
+        "risk_label": label,
+        "risk_color": color,
+        "summary":    summary
+    }
 
 @app.post("/report/pdf")
 async def export_pdf(scan_data: dict):
@@ -108,11 +171,18 @@ async def export_pdf(scan_data: dict):
         pdf_bytes = generate_pdf(scan_data)
         target    = scan_data.get("target", "report").replace("/", "_").replace(":", "")[:40]
         filename  = f"SSA_Report_{target}.pdf"
-        return Response(content=pdf_bytes, media_type="application/pdf",
-                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
     except Exception as e:
         raise HTTPException(500, f"PDF generation failed: {str(e)}")
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "virustotal_key_set": bool(VIRUSTOTAL_API_KEY),
+        "anthropic_key_set":  bool(ANTHROPIC_API_KEY),
+    }
