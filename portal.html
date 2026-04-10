@@ -584,9 +584,30 @@
     document.getElementById('error-card').classList.add('visible');
   }
 
+  /* ── Scan history (localStorage) ────────────────────────────── */
+  function saveScan(data) {
+    try {
+      const history = JSON.parse(localStorage.getItem('meisentis_scans') || '[]');
+      history.unshift({
+        id:        Date.now(),
+        target:    data.target    || '—',
+        type:      (data.type     || 'file').toUpperCase(),
+        score:     data.risk_score || 0,
+        label:     data.risk_label || '—',
+        sha256:    data.sha256    || '',
+        summary:   data.summary   || '',
+        vt_stats:  data.vt_stats  || {},
+        timestamp: new Date().toISOString(),
+      });
+      // Keep last 100 scans
+      localStorage.setItem('meisentis_scans', JSON.stringify(history.slice(0, 100)));
+    } catch(e) { console.warn('Could not save scan history', e); }
+  }
+
   /* ── Render result ───────────────────────────────────────────── */
   function renderResult(data) {
     lastScanData = data;
+    saveScan(data);
     const score  = data.risk_score || 0;
     const stats  = data.vt_stats  || {};
     const label  = data.risk_label || 'UNKNOWN';
