@@ -1,67 +1,96 @@
-// ── Meisentis — Shared shell, nav, and design tokens ────────────────────────
-// Include this script in every page. It injects the nav and applies global CSS.
+// ── Meisentis — Shared nav shell ─────────────────────────────────────────────
+// Include this script in every page. Injects the nav and applies global CSS.
 
+const BACKEND = 'https://meisentinel.onrender.com';
 const BASE_URL = '';
-const BACKEND  = 'https://meisentinel.onrender.com';
 
 const NAV_HTML = `
-<nav class="ssa-nav">
-  <a class="nav-logo" href="${BASE_URL}landing.html">
-    <div class="nav-logomark">M</div>
-    <div class="nav-logotype">
-      <span class="nav-logotype-main">Meisentis</span>
-      <span class="nav-logotype-sub">The Truth Sentinel</span>
+<nav class="m-nav">
+  <a class="m-nav-logo" href="${BASE_URL}landing.html">
+    <div class="m-nav-logomark">M</div>
+    <div class="m-nav-logotype">
+      <span class="m-nav-name">Meisentis</span>
+      <span class="m-nav-sub">Truth Sentinel</span>
     </div>
   </a>
-  <div class="nav-links">
-    <a href="${BASE_URL}landing.html" class="nav-link" data-page="landing">Product</a>
-    <a href="${BASE_URL}dashboard.html" class="nav-link" data-page="dashboard">Dashboard</a>
-    <a href="${BASE_URL}portal.html" class="nav-link" data-page="portal">Scan</a>
+  <div class="m-nav-links">
+    <a href="${BASE_URL}landing.html"   class="m-nav-link" data-page="landing">Product</a>
+    <a href="${BASE_URL}dashboard.html" class="m-nav-link" data-page="dashboard">Dashboard</a>
+    <a href="${BASE_URL}portal.html"    class="m-nav-link" data-page="portal">Scan</a>
   </div>
-  <div class="nav-right">
-    <div class="nav-status"><span class="nav-dot"></span>LIVE</div>
-    <a href="${BASE_URL}portal.html" class="nav-cta">New Scan →</a>
+  <div class="m-nav-right">
+    <div class="m-nav-status"><span class="m-nav-dot"></span>Live</div>
+    <a href="${BASE_URL}portal.html" class="m-nav-cta">New Scan →</a>
   </div>
 </nav>`;
 
 const NAV_CSS = `
-  .ssa-nav {
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'DM Sans', sans-serif;
+    background: #F7F8FA;
+    color: #0F1923;
+  }
+
+  .m-nav {
     position: fixed; top: 0; left: 0; right: 0; z-index: 200;
     height: 56px;
     display: flex; align-items: center;
     padding: 0 32px; gap: 32px;
-    background: rgba(10,12,15,0.92);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid #1e242c;
+    background: #ffffff;
+    border-bottom: 1px solid #E8ECF0;
   }
-  .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
-  .nav-logomark {
-    width:32px; height:32px; border:1.5px solid #00d4ff;
-    display:grid; place-items:center;
-    font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:700;
-    color:#00d4ff; letter-spacing:-0.5px;
-    box-shadow: 0 0 10px rgba(0,212,255,0.15);
+  .m-nav-logo {
+    display: flex; align-items: center; gap: 10px;
+    text-decoration: none;
   }
-  .nav-logotype { display:flex; flex-direction:column; gap:1px; }
-  .nav-logotype-main { font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:700; color:#c8d0da; letter-spacing:0.02em; }
-  .nav-logotype-sub  { font-family:'IBM Plex Mono',monospace; font-size:8px; color:#5a6672; letter-spacing:0.08em; }
-  .nav-links { display:flex; gap:4px; margin-left:auto; }
-  .nav-link {
-    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.06em;
-    color:#5a6672; text-decoration:none; padding:6px 14px;
-    border:1px solid transparent; transition:all 0.15s;
+  .m-nav-logomark {
+    width: 30px; height: 30px;
+    background: #0F1923;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px; font-weight: 500;
+    color: #fff;
   }
-  .nav-link:hover, .nav-link.active { color:#c8d0da; border-color:#1e242c; background:rgba(255,255,255,0.03); }
-  .nav-right { display:flex; align-items:center; gap:16px; }
-  .nav-status { display:flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#5a6672; }
-  .nav-dot { width:6px; height:6px; border-radius:50%; background:#00c96e; animation: ndot 2s ease-in-out infinite; }
-  @keyframes ndot { 0%,100%{opacity:1} 50%{opacity:0.3} }
-  .nav-cta {
-    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:700;
-    color:#0a0c0f; background:#00d4ff; padding:7px 16px;
-    text-decoration:none; letter-spacing:0.06em; transition:all 0.15s;
+  .m-nav-logotype { display: flex; flex-direction: column; gap: 1px; }
+  .m-nav-name { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; color: #0F1923; letter-spacing: -0.2px; }
+  .m-nav-sub  { font-family: 'DM Mono', monospace; font-size: 9px; color: #94A3B8; letter-spacing: 0.04em; }
+
+  .m-nav-links { display: flex; gap: 2px; margin-left: auto; }
+  .m-nav-link {
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    color: #64748B; text-decoration: none;
+    padding: 6px 14px; border-radius: 7px;
+    transition: all 0.15s;
   }
-  .nav-cta:hover { background:#00b8d9; }
+  .m-nav-link:hover { background: #F1F5F9; color: #0F1923; }
+  .m-nav-link.active { background: #F1F5F9; color: #0F1923; }
+
+  .m-nav-right { display: flex; align-items: center; gap: 16px; }
+  .m-nav-status {
+    display: flex; align-items: center; gap: 6px;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: #94A3B8;
+  }
+  .m-nav-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #22C55E;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .m-nav-cta {
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    color: #fff; background: #0F1923;
+    padding: 7px 16px; border-radius: 8px;
+    text-decoration: none; letter-spacing: 0.01em;
+    transition: background 0.15s;
+  }
+  .m-nav-cta:hover { background: #1E293B; }
 `;
 
 function injectNav(activePage) {
@@ -73,7 +102,7 @@ function injectNav(activePage) {
   nav.innerHTML = NAV_HTML;
   document.body.prepend(nav.firstElementChild);
 
-  document.querySelectorAll('.nav-link').forEach(a => {
+  document.querySelectorAll('.m-nav-link').forEach(a => {
     if (a.dataset.page === activePage) a.classList.add('active');
   });
 
