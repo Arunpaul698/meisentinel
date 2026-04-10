@@ -700,7 +700,7 @@
     const url = document.getElementById('url-input').value.trim();
     if (!url) { document.getElementById('url-input').focus(); return; }
     resetTiers();
-    showLoading('Submitting URL to VirusTotal…');
+    showLoading('Submitting URL to VirusTotal… (may take 1–3 min)');
     setTier(1, 'done');
     setTier(2, 'pending');
     document.getElementById('url-scan-btn').disabled = true;
@@ -709,13 +709,20 @@
     form.append('url', url);
 
     try {
-      const resp = await fetch(`${BACKEND}/scan/url`, { method: 'POST', body: form });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180000); // 3 min max
+      const resp = await fetch(`${BACKEND}/scan/url`, { method: 'POST', body: form, signal: controller.signal });
+      clearTimeout(timeout);
       if (!resp.ok) throw new Error(`Server error ${resp.status}`);
       const data = await resp.json();
       setTier(2, 'done'); setTier(3, 'pending');
       setTimeout(() => { setTier(3, 'done'); renderResult(data); }, 800);
     } catch (err) {
-      showError(err.message || 'Scan failed. Check that the backend is running.');
+      if (err.name === 'AbortError') {
+        showError('Scan timed out after 3 minutes. The backend may be starting up — please try again.');
+      } else {
+        showError(err.message || 'Scan failed. The backend may be waking up — wait 30s and try again.');
+      }
     } finally {
       document.getElementById('url-scan-btn').disabled = false;
     }
