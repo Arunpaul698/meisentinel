@@ -3,364 +3,366 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>SecureCheck — Automated Software Security Assessment</title>
+<title>Meisentis — Automated Software Security Assessment</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Syne:wght@400;700;800&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="shared.js"></script>
 <style>
-:root {
-  --bg:      #0a0c0f;
-  --s1:      #0e1115;
-  --s2:      #111418;
-  --border:  #1e242c;
-  --border2: #2a3340;
-  --text:    #c8d0da;
-  --muted:   #5a6672;
-  --accent:  #00d4ff;
-  --a2:      #00b8d9;
-  --safe:    #00c96e;
-  --warn:    #ff9500;
-  --danger:  #ff3b30;
-  --mono:    'IBM Plex Mono', monospace;
-  --display: 'Syne', sans-serif;
-  --body:    'IBM Plex Sans', sans-serif;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:var(--body);overflow-x:hidden}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: 'DM Sans', sans-serif; background: #F7F8FA; color: #0F1923; overflow-x: hidden; }
 
-/* scanlines */
-body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px);pointer-events:none;z-index:500}
-
-/* ── HERO ─────────────────────────────────────────────────────────────────── */
+/* ── HERO ─────────────────────────────────────────── */
 .hero {
-  min-height: 100vh;
+  min-height: 92vh;
   display: flex; flex-direction: column; justify-content: center;
-  padding: 120px 64px 80px;
+  padding: 120px 72px 80px;
   position: relative; overflow: hidden;
+  background: #fff;
+  border-bottom: 1px solid #E8ECF0;
 }
 
-/* grid background */
+/* Subtle dot-grid background */
 .hero::before {
-  content:'';position:absolute;inset:0;
-  background-image:
-    linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px);
-  background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%);
+  content: '';
+  position: absolute; inset: 0;
+  background-image: radial-gradient(#CBD5E1 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.45;
+  mask-image: radial-gradient(ellipse 70% 80% at 60% 40%, black 20%, transparent 80%);
 }
 
-/* glow orb */
-.hero-glow {
-  position:absolute; top:-20%; right:-10%;
-  width:700px; height:700px; border-radius:50%;
-  background: radial-gradient(circle, rgba(0,212,255,0.07) 0%, transparent 70%);
-  pointer-events:none;
-}
+.hero-inner { position: relative; max-width: 1100px; margin: 0 auto; width: 100%; }
 
 .hero-eyebrow {
-  font-family:var(--mono); font-size:11px; letter-spacing:0.2em;
-  color:var(--accent); margin-bottom:24px;
-  display:flex; align-items:center; gap:12px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'DM Mono', monospace; font-size: 11px;
+  letter-spacing: 0.1em; color: #64748B;
+  background: #F1F5F9; border: 1px solid #E2E8F0;
+  padding: 5px 12px; border-radius: 20px;
+  margin-bottom: 28px;
 }
-.hero-eyebrow::before {
-  content:''; display:block; width:32px; height:1px; background:var(--accent);
+.hero-eyebrow-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #22C55E;
+  animation: pulse-dot 2s ease-in-out infinite;
 }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
 .hero-headline {
-  font-family:var(--display); font-size:clamp(48px,7vw,96px);
-  font-weight:800; line-height:1.0; letter-spacing:-0.02em;
-  color:#fff; max-width:780px;
-  margin-bottom:28px;
+  font-size: clamp(44px, 6vw, 80px);
+  font-weight: 600; line-height: 1.05; letter-spacing: -0.03em;
+  color: #0F1923; max-width: 760px; margin-bottom: 24px;
 }
-
-.hero-headline .hl { color:var(--accent); }
+.hero-headline em { font-style: normal; color: #3B82F6; }
 
 .hero-sub {
-  font-size:18px; font-weight:300; line-height:1.7;
-  color:var(--muted); max-width:520px; margin-bottom:48px;
+  font-size: 18px; font-weight: 400; line-height: 1.7;
+  color: #64748B; max-width: 480px; margin-bottom: 40px;
 }
 
-.hero-actions { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 64px; }
 
 .btn-primary {
-  font-family:var(--mono); font-size:13px; font-weight:700;
-  letter-spacing:0.08em; color:#0a0c0f; background:var(--accent);
-  padding:16px 36px; text-decoration:none; border:none; cursor:pointer;
-  transition:all 0.2s; display:inline-block;
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+  color: #fff; background: #0F1923;
+  padding: 13px 28px; border-radius: 10px;
+  text-decoration: none; transition: background 0.15s;
 }
-.btn-primary:hover{background:var(--a2); transform:translateY(-1px);}
+.btn-primary:hover { background: #1E293B; }
 
 .btn-ghost {
-  font-family:var(--mono); font-size:12px; letter-spacing:0.08em;
-  color:var(--muted); border:1px solid var(--border2);
-  padding:15px 32px; text-decoration:none; transition:all 0.2s; display:inline-block;
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+  color: #475569; border: 1px solid #E2E8F0;
+  padding: 12px 24px; border-radius: 10px;
+  text-decoration: none; background: #fff; transition: all 0.15s;
 }
-.btn-ghost:hover{color:var(--text); border-color:var(--accent);}
+.btn-ghost:hover { border-color: #94A3B8; color: #0F1923; }
 
+/* Hero stats */
 .hero-stats {
-  display:flex; gap:40px; margin-top:72px; padding-top:40px;
-  border-top:1px solid var(--border);
+  display: flex; gap: 0;
+  border: 1px solid #E8ECF0; border-radius: 12px;
+  background: #F8FAFC; width: fit-content; overflow: hidden;
 }
+.hero-stat {
+  padding: 18px 28px; border-right: 1px solid #E8ECF0;
+}
+.hero-stat:last-child { border-right: none; }
 .hero-stat-val {
-  font-family:var(--display); font-size:40px; font-weight:800;
-  color:#fff; line-height:1;
+  font-size: 28px; font-weight: 700; color: #0F1923;
+  letter-spacing: -0.5px; line-height: 1;
 }
 .hero-stat-label {
-  font-family:var(--mono); font-size:10px; letter-spacing:0.12em;
-  color:var(--muted); margin-top:6px;
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  color: #94A3B8; margin-top: 4px; letter-spacing: 0.04em;
 }
 
-/* ── MARQUEE TICKER ─────────────────────────────────────────────────────── */
+/* ── TICKER ─────────────────────────────────────── */
 .ticker-wrap {
-  border-top:1px solid var(--border); border-bottom:1px solid var(--border);
-  background:var(--s1); overflow:hidden; padding:12px 0;
+  border-top: 1px solid #E8ECF0; border-bottom: 1px solid #E8ECF0;
+  background: #F8FAFC; overflow: hidden; padding: 11px 0;
 }
-.ticker {
-  display:flex; gap:0; white-space:nowrap;
-  animation: ticker 22s linear infinite;
-}
+.ticker { display: flex; white-space: nowrap; animation: ticker 26s linear infinite; }
 .ticker-item {
-  font-family:var(--mono); font-size:11px; letter-spacing:0.1em;
-  color:var(--muted); padding:0 40px;
-  display:flex; align-items:center; gap:12px;
+  font-family: 'DM Mono', monospace; font-size: 11px;
+  color: #94A3B8; padding: 0 36px;
+  display: inline-flex; align-items: center; gap: 10px;
 }
-.ticker-item .ti-dot { color:var(--accent); }
+.ti-dot { color: #3B82F6; }
 @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
 
-/* ── HOW IT WORKS ─────────────────────────────────────────────────────────── */
-.section { padding:100px 64px; }
+/* ── SECTIONS ────────────────────────────────────── */
+.section { padding: 96px 72px; }
+.section-inner { max-width: 1100px; margin: 0 auto; }
+
 .section-eyebrow {
-  font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
-  color:var(--accent); margin-bottom:16px;
+  font-family: 'DM Mono', monospace; font-size: 11px;
+  letter-spacing: 0.1em; color: #3B82F6; margin-bottom: 14px;
+  text-transform: uppercase;
 }
 .section-title {
-  font-family:var(--display); font-size:clamp(32px,4vw,52px);
-  font-weight:800; color:#fff; margin-bottom:16px; line-height:1.1;
+  font-size: clamp(28px, 3.5vw, 46px); font-weight: 600;
+  color: #0F1923; margin-bottom: 14px; line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 .section-sub {
-  font-size:16px; color:var(--muted); max-width:480px;
-  line-height:1.7; margin-bottom:64px;
+  font-size: 16px; color: #64748B; max-width: 460px;
+  line-height: 1.7; margin-bottom: 56px;
 }
+
+/* ── HOW IT WORKS ────────────────────────────────── */
+.how-section { background: #fff; border-top: 1px solid #E8ECF0; border-bottom: 1px solid #E8ECF0; }
 
 .tiers-grid {
-  display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
-  background:var(--border); border:1px solid var(--border);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
 }
 .tier-card {
-  background:var(--s2); padding:32px 24px;
-  position:relative; overflow:hidden;
-  transition:background 0.2s;
+  background: #F8FAFC; border: 1px solid #E8ECF0;
+  border-radius: 14px; padding: 28px 22px;
+  transition: border-color 0.2s, transform 0.2s;
+  position: relative; overflow: hidden;
 }
-.tier-card:hover { background:#161c22; }
-.tier-card::before {
-  content:attr(data-n);
-  position:absolute; top:-10px; right:-4px;
-  font-family:var(--display); font-size:90px; font-weight:800;
-  color:rgba(0,212,255,0.04); line-height:1; pointer-events:none;
+.tier-card:hover { border-color: #CBD5E1; transform: translateY(-2px); }
+.tier-num {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: #0F1923; color: #fff;
+  font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px;
 }
 .tier-badge {
-  font-family:var(--mono); font-size:9px; letter-spacing:0.15em;
-  color:var(--accent); border:1px solid rgba(0,212,255,0.25);
-  background:rgba(0,212,255,0.07); padding:4px 10px;
-  display:inline-block; margin-bottom:20px;
+  display: inline-block; font-family: 'DM Mono', monospace;
+  font-size: 9px; letter-spacing: 0.1em; color: #3B82F6;
+  background: #EFF6FF; border: 1px solid #BFDBFE;
+  padding: 3px 9px; border-radius: 20px; margin-bottom: 16px;
 }
-.tier-icon { font-size:28px; margin-bottom:16px; display:block; }
-.tier-name {
-  font-family:var(--mono); font-size:13px; font-weight:700;
-  color:#fff; margin-bottom:10px;
-}
-.tier-desc { font-size:13px; color:var(--muted); line-height:1.7; }
+.tier-icon { font-size: 24px; margin-bottom: 14px; display: block; }
+.tier-name { font-size: 14px; font-weight: 600; color: #0F1923; margin-bottom: 8px; }
+.tier-desc { font-size: 13px; color: #64748B; line-height: 1.65; }
 .tier-time {
-  font-family:var(--mono); font-size:10px; color:var(--muted);
-  margin-top:16px; letter-spacing:0.08em;
+  font-family: 'DM Mono', monospace; font-size: 10px; color: #94A3B8;
+  margin-top: 16px; letter-spacing: 0.04em;
 }
 
-/* ── FEATURE BENTO ─────────────────────────────────────────────────────────── */
-.bento { padding:0 64px 100px; }
+/* ── BENTO ───────────────────────────────────────── */
+.bento-section { background: #F7F8FA; }
+
 .bento-grid {
-  display:grid;
-  grid-template-columns:repeat(6,1fr);
-  grid-template-rows:auto;
-  gap:12px;
+  display: grid; grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
 }
 .bento-card {
-  background:var(--s2); border:1px solid var(--border);
-  padding:32px; position:relative; overflow:hidden;
-  transition:border-color 0.2s, transform 0.2s;
+  background: #fff; border: 1px solid #E8ECF0;
+  border-radius: 14px; padding: 28px;
+  transition: border-color 0.2s, transform 0.15s;
 }
-.bento-card:hover { border-color:var(--border2); transform:translateY(-2px); }
-
-.bc1 { grid-column:span 4; }
-.bc2 { grid-column:span 2; }
-.bc3 { grid-column:span 2; }
-.bc4 { grid-column:span 2; }
-.bc5 { grid-column:span 2; }
+.bento-card:hover { border-color: #CBD5E1; transform: translateY(-1px); }
+.bc1 { grid-column: span 4; }
+.bc2 { grid-column: span 2; }
+.bc3 { grid-column: span 2; }
+.bc4 { grid-column: span 2; }
+.bc5 { grid-column: span 2; }
 
 .bento-label {
-  font-family:var(--mono); font-size:9px; letter-spacing:0.18em;
-  color:var(--accent); margin-bottom:12px;
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  letter-spacing: 0.1em; color: #94A3B8; margin-bottom: 10px;
+  text-transform: uppercase;
 }
-.bento-title {
-  font-family:var(--display); font-size:22px; font-weight:700;
-  color:#fff; margin-bottom:10px; line-height:1.2;
-}
-.bento-desc { font-size:13px; color:var(--muted); line-height:1.7; }
+.bento-title { font-size: 20px; font-weight: 600; color: #0F1923; margin-bottom: 10px; line-height: 1.25; }
+.bento-desc  { font-size: 13px; color: #64748B; line-height: 1.7; }
 
-/* score display inside bento */
-.mini-score {
-  margin-top:24px; display:flex; align-items:baseline; gap:8px;
-}
-.mini-score-num {
-  font-family:var(--display); font-size:72px; font-weight:800; line-height:1;
-}
-.mini-score-slash { font-family:var(--mono); font-size:18px; color:var(--muted); }
-.mini-score-label {
-  font-family:var(--mono); font-size:10px; letter-spacing:0.12em;
-  display:block; margin-top:4px;
-}
-.mini-bar { height:4px; background:var(--border2); margin-top:14px; }
-.mini-bar-fill { height:100%; }
+/* Mini score display */
+.mini-score { margin-top: 22px; display: flex; align-items: flex-end; gap: 8px; }
+.mini-score-num { font-size: 64px; font-weight: 700; line-height: 1; letter-spacing: -2px; }
+.mini-score-slash { font-family: 'DM Mono', monospace; font-size: 16px; color: #CBD5E1; padding-bottom: 8px; }
+.mini-score-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.06em; margin-top: 8px; }
+.mini-bar { height: 4px; background: #F1F5F9; border-radius: 99px; margin-top: 14px; }
+.mini-bar-fill { height: 100%; border-radius: 99px; }
 
-/* stat inside bento */
-.bento-stat-big {
-  font-family:var(--display); font-size:52px; font-weight:800;
-  color:#fff; line-height:1; margin-top:12px;
-}
-.bento-stat-sub {
-  font-family:var(--mono); font-size:10px; color:var(--muted);
-  letter-spacing:0.1em; margin-top:6px;
+/* Bento stat */
+.bento-stat-big { font-size: 48px; font-weight: 700; color: #0F1923; line-height: 1; margin-top: 10px; letter-spacing: -2px; }
+.bento-stat-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: #94A3B8; letter-spacing: 0.06em; margin-top: 5px; }
+
+/* Type tags */
+.type-tags { display: flex; gap: 8px; margin-top: 20px; }
+.type-tag {
+  padding: 7px 14px; border: 1px solid #E8ECF0; border-radius: 8px;
+  font-family: 'DM Mono', monospace; font-size: 11px; color: #475569;
+  background: #F8FAFC;
 }
 
-/* ── PRICING ─────────────────────────────────────────────────────────────── */
-.pricing { padding:100px 64px; background:var(--s1); border-top:1px solid var(--border); }
+/* ── PRICING ─────────────────────────────────────── */
+.pricing-section { background: #fff; border-top: 1px solid #E8ECF0; }
 
-.plans-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:48px; }
-
+.plans-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 48px; }
 .plan-card {
-  border:1px solid var(--border); background:var(--s2); padding:36px 28px;
-  position:relative; transition:border-color 0.2s;
+  border: 1px solid #E8ECF0; background: #F8FAFC;
+  border-radius: 16px; padding: 32px 28px; position: relative;
+  transition: border-color 0.2s;
 }
-.plan-card:hover { border-color:var(--border2); }
+.plan-card:hover { border-color: #CBD5E1; }
 .plan-card.featured {
-  border-color:var(--accent);
-  background:linear-gradient(135deg,#0e1a1f 0%,#111418 100%);
+  border-color: #0F1923; background: #0F1923; color: #fff;
 }
 .plan-featured-badge {
-  position:absolute; top:-1px; left:50%; transform:translateX(-50%);
-  background:var(--accent); color:#0a0c0f;
-  font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:0.12em;
-  padding:4px 16px; white-space:nowrap;
+  position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+  background: #3B82F6; color: #fff;
+  font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500;
+  letter-spacing: 0.1em; padding: 4px 14px; border-radius: 0 0 8px 8px;
+  white-space: nowrap;
 }
-.plan-name { font-family:var(--mono); font-size:11px; letter-spacing:0.15em; color:var(--muted); margin-bottom:16px; }
+.plan-name {
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  letter-spacing: 0.12em; color: #94A3B8; margin-bottom: 14px;
+  text-transform: uppercase;
+}
+.featured .plan-name { color: #64748B; }
 .plan-price {
-  font-family:var(--display); font-size:48px; font-weight:800; color:#fff;
-  line-height:1; margin-bottom:4px;
+  font-size: 42px; font-weight: 700; color: #0F1923;
+  line-height: 1; margin-bottom: 4px; letter-spacing: -1.5px;
 }
-.plan-price span { font-size:18px; color:var(--muted); font-weight:400; }
-.plan-billing { font-family:var(--mono); font-size:10px; color:var(--muted); margin-bottom:28px; }
-.plan-divider { height:1px; background:var(--border); margin-bottom:24px; }
+.featured .plan-price { color: #fff; }
+.plan-price span { font-size: 16px; color: #94A3B8; font-weight: 400; letter-spacing: 0; }
+.plan-billing { font-family: 'DM Mono', monospace; font-size: 10px; color: #94A3B8; margin-bottom: 24px; }
+.plan-divider { height: 1px; background: #E8ECF0; margin-bottom: 20px; }
+.featured .plan-divider { background: rgba(255,255,255,0.1); }
 .plan-feature {
-  display:flex; align-items:flex-start; gap:10px; margin-bottom:12px;
-  font-size:13px; color:var(--muted); line-height:1.5;
+  display: flex; gap: 10px; margin-bottom: 10px;
+  font-size: 13px; color: #475569; line-height: 1.5; align-items: flex-start;
 }
-.plan-feature .pf-check { color:var(--safe); font-size:12px; flex-shrink:0; margin-top:2px; }
-.plan-feature .pf-x    { color:var(--border2); font-size:12px; flex-shrink:0; margin-top:2px; }
-.plan-btn {
-  width:100%; margin-top:28px; padding:14px;
-  font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:0.08em;
-  cursor:pointer; border:none; transition:all 0.15s; text-decoration:none;
-  display:block; text-align:center;
-}
-.plan-btn-ghost { background:transparent; border:1px solid var(--border2); color:var(--muted); }
-.plan-btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
-.plan-btn-accent { background:var(--accent); color:#0a0c0f; }
-.plan-btn-accent:hover { background:var(--a2); }
+.featured .plan-feature { color: #94A3B8; }
+.pf-check { color: #22C55E; flex-shrink: 0; margin-top: 1px; font-size: 13px; }
+.pf-x     { color: #CBD5E1; flex-shrink: 0; margin-top: 1px; font-size: 13px; }
+.featured .pf-x { color: rgba(255,255,255,0.2); }
 
-/* ── CTA STRIP ─────────────────────────────────────────────────────────────── */
-.cta-strip {
-  padding:80px 64px; text-align:center;
-  border-top:1px solid var(--border); position:relative; overflow:hidden;
+.plan-btn {
+  width: 100%; margin-top: 24px; padding: 12px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; border-radius: 10px; border: none;
+  text-decoration: none; display: block; text-align: center;
+  transition: all 0.15s;
 }
-.cta-strip::before {
-  content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:600px;height:300px;border-radius:50%;
-  background:radial-gradient(ellipse,rgba(0,212,255,0.06) 0%,transparent 70%);
-  pointer-events:none;
+.plan-btn-ghost  { background: transparent; border: 1px solid #E2E8F0; color: #475569; }
+.plan-btn-ghost:hover  { border-color: #94A3B8; color: #0F1923; }
+.plan-btn-accent { background: #3B82F6; color: #fff; }
+.plan-btn-accent:hover { background: #2563EB; }
+.plan-btn-dark   { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.15); }
+.plan-btn-dark:hover { background: rgba(255,255,255,0.2); }
+
+/* ── CTA STRIP ───────────────────────────────────── */
+.cta-section {
+  padding: 96px 72px; text-align: center;
+  border-top: 1px solid #E8ECF0; background: #F7F8FA;
+  position: relative; overflow: hidden;
+}
+.cta-bg {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px; height: 300px; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(59,130,246,0.06) 0%, transparent 70%);
+  pointer-events: none;
 }
 .cta-title {
-  font-family:var(--display); font-size:clamp(28px,4vw,52px);
-  font-weight:800; color:#fff; margin-bottom:16px;
+  font-size: clamp(26px, 3.5vw, 44px); font-weight: 600;
+  color: #0F1923; margin-bottom: 14px; letter-spacing: -0.02em;
+  position: relative;
 }
-.cta-sub { font-size:16px; color:var(--muted); margin-bottom:40px; }
+.cta-sub { font-size: 16px; color: #64748B; margin-bottom: 36px; position: relative; }
 
-/* ── FOOTER ─────────────────────────────────────────────────────────────── */
+/* ── FOOTER ──────────────────────────────────────── */
 footer {
-  border-top:1px solid var(--border); background:var(--s1);
-  padding:28px 64px; display:flex; justify-content:space-between; align-items:center;
+  border-top: 1px solid #E8ECF0; background: #fff;
+  padding: 24px 72px; display: flex;
+  justify-content: space-between; align-items: center;
 }
-.footer-logo { font-family:var(--mono); font-size:11px; color:var(--muted); }
-.footer-links { display:flex; gap:24px; }
-.footer-link { font-family:var(--mono); font-size:10px; color:var(--muted); text-decoration:none; letter-spacing:0.08em; }
-.footer-link:hover { color:var(--accent); }
+.footer-logo { font-family: 'DM Mono', monospace; font-size: 11px; color: #94A3B8; }
+.footer-links { display: flex; gap: 24px; }
+.footer-link { font-family: 'DM Mono', monospace; font-size: 10px; color: #94A3B8; text-decoration: none; letter-spacing: 0.06em; text-transform: uppercase; }
+.footer-link:hover { color: #0F1923; }
 
-/* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
-@media(max-width:900px){
-  .hero,.section,.bento,.pricing,.cta-strip{padding-left:24px;padding-right:24px;}
-  .tiers-grid{grid-template-columns:repeat(2,1fr);}
-  .bento-grid{grid-template-columns:1fr;}
-  .bc1,.bc2,.bc3,.bc4,.bc5{grid-column:span 1;}
-  .plans-grid{grid-template-columns:1fr;}
-  .hero-stats{flex-wrap:wrap;gap:24px;}
-  footer{flex-direction:column;gap:16px;text-align:center;}
+/* ── REVEAL ──────────────────────────────────────── */
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.55s ease, transform 0.55s ease; }
+.reveal.visible { opacity: 1; transform: none; }
+
+/* ── RESPONSIVE ──────────────────────────────────── */
+@media(max-width:960px){
+  .hero,.section,.cta-section { padding-left:24px; padding-right:24px; }
+  footer { padding-left:24px; padding-right:24px; }
+  .tiers-grid { grid-template-columns:repeat(2,1fr); }
+  .bento-grid { grid-template-columns:1fr; }
+  .bc1,.bc2,.bc3,.bc4,.bc5 { grid-column:span 1; }
+  .plans-grid { grid-template-columns:1fr; }
+  .hero-stats { flex-direction:column; gap:0; border:none; background:none; width:100%; }
+  .hero-stat { border:1px solid #E8ECF0; border-radius:10px; margin-bottom:8px; }
+  footer { flex-direction:column; gap:16px; text-align:center; }
 }
-
-/* ── ANIMATIONS ─────────────────────────────────────────────────────────── */
-.reveal { opacity:0; transform:translateY(20px); transition:opacity 0.6s ease, transform 0.6s ease; }
-.reveal.visible { opacity:1; transform:none; }
 </style>
 </head>
 <body>
 
-<script src="shared.js"></script>
+<script>injectNav('landing');</script>
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-glow"></div>
-
-  <div class="hero-eyebrow">SOFTWARE SECURITY ASSESSMENT AGENT</div>
-
-  <h1 class="hero-headline">
-    Automate <span class="hl">60–70%</span><br/>
-    of your security<br/>assessments.
-  </h1>
-
-  <p class="hero-sub">
-    AI-powered triage that scans files and URLs in minutes — not days.
-    Your team reviews only what truly needs a human eye.
-  </p>
-
-  <div class="hero-actions">
-    <a href="portal.html" class="btn-primary">Try a Free Scan →</a>
-    <a href="#how-it-works" class="btn-ghost">See How It Works</a>
-  </div>
-
-  <div class="hero-stats">
-    <div>
-      <div class="hero-stat-val">500</div>
-      <div class="hero-stat-label">ASSESSMENTS / YEAR HANDLED</div>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">
+      <span class="hero-eyebrow-dot"></span>
+      Software Security Assessment Agent
     </div>
-    <div>
-      <div class="hero-stat-val">8m</div>
-      <div class="hero-stat-label">AVERAGE SCAN TIME</div>
+
+    <h1 class="hero-headline">
+      Automate <em>60–70%</em> of your<br/>security assessments.
+    </h1>
+
+    <p class="hero-sub">
+      AI-powered triage that scans files and URLs in minutes — not days.
+      Your team reviews only what truly needs a human eye.
+    </p>
+
+    <div class="hero-actions">
+      <a href="portal.html" class="btn-primary">Try a free scan →</a>
+      <a href="#how-it-works" class="btn-ghost">See how it works</a>
     </div>
-    <div>
-      <div class="hero-stat-val">70%</div>
-      <div class="hero-stat-label">AUTO-RESOLVED WITHOUT ANALYST</div>
-    </div>
-    <div>
-      <div class="hero-stat-val">70+</div>
-      <div class="hero-stat-label">AV ENGINES PER SCAN</div>
+
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-val">500</div>
+        <div class="hero-stat-label">Assessments / year</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-val">8m</div>
+        <div class="hero-stat-label">Avg. scan time</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-val">70%</div>
+        <div class="hero-stat-label">Auto-resolved</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-val">70+</div>
+        <div class="hero-stat-label">AV engines per scan</div>
+      </div>
     </div>
   </div>
 </section>
@@ -368,189 +370,200 @@ footer {
 <!-- TICKER -->
 <div class="ticker-wrap">
   <div class="ticker">
-    <!-- duplicated for seamless loop -->
-    <span class="ticker-item"><span class="ti-dot">▸</span> VirusTotal — 70+ engines</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> SHA-256 hash registry</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> Claude AI summaries</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> File &amp; URL scanning</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> Confidence scoring 0–100</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> PDF report export</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> Auto-routing by risk tier</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> ServiceNow integration</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> VirusTotal — 70+ engines</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> SHA-256 hash registry</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> Claude AI summaries</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> File &amp; URL scanning</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> Confidence scoring 0–100</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> PDF report export</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> Auto-routing by risk tier</span>
-    <span class="ticker-item"><span class="ti-dot">▸</span> ServiceNow integration</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>VirusTotal — 70+ engines</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>SHA-256 hash registry</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>Claude AI summaries</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>File &amp; URL scanning</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>Confidence scoring 0–100</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>PDF report export</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>Auto-routing by risk tier</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>ServiceNow integration</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>VirusTotal — 70+ engines</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>SHA-256 hash registry</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>Claude AI summaries</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>File &amp; URL scanning</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>Confidence scoring 0–100</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>PDF report export</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>Auto-routing by risk tier</span>
+    <span class="ticker-item"><span class="ti-dot">▸</span>ServiceNow integration</span>
   </div>
 </div>
 
 <!-- HOW IT WORKS -->
-<section class="section" id="how-it-works">
-  <div class="section-eyebrow reveal">HOW IT WORKS</div>
-  <h2 class="section-title reveal">Four tiers.<br/>One result.</h2>
-  <p class="section-sub reveal">Every submission flows through an automated pipeline — only the hardest cases reach your team.</p>
+<section class="section how-section" id="how-it-works">
+  <div class="section-inner">
+    <div class="section-eyebrow reveal">How it works</div>
+    <h2 class="section-title reveal">Four tiers. One result.</h2>
+    <p class="section-sub reveal">Every submission flows through an automated pipeline — only the hardest cases reach your team.</p>
 
-  <div class="tiers-grid reveal">
-    <div class="tier-card" data-n="1">
-      <span class="tier-badge">TIER 1</span>
-      <span class="tier-icon">🔑</span>
-      <div class="tier-name">Hash Registry</div>
-      <div class="tier-desc">SHA-256 fingerprint checked against every previously cleared file. Known files resolve in under a second.</div>
-      <div class="tier-time">⚡ INSTANT</div>
-    </div>
-    <div class="tier-card" data-n="2">
-      <span class="tier-badge">TIER 2</span>
-      <span class="tier-icon">⚙️</span>
-      <div class="tier-name">Automated Scan</div>
-      <div class="tier-desc">VirusTotal, CrowdStrike, Network, and Registry engines fire in parallel — each contributing a weighted threat signal.</div>
-      <div class="tier-time">⏱ 8–12 MINUTES</div>
-    </div>
-    <div class="tier-card" data-n="3">
-      <span class="tier-badge">TIER 3</span>
-      <span class="tier-icon">🧠</span>
-      <div class="tier-name">AI Analysis</div>
-      <div class="tier-desc">An LLM reviews all tool outputs alongside historical assessments via RAG, producing a scored draft report.</div>
-      <div class="tier-time">🤖 AI LAYER</div>
-    </div>
-    <div class="tier-card" data-n="4">
-      <span class="tier-badge">TIER 4</span>
-      <span class="tier-icon">👥</span>
-      <div class="tier-name">Human Review</div>
-      <div class="tier-desc">Analysts only see pre-drafted reports on complex or high-risk cases. No more manual data collection.</div>
-      <div class="tier-time">👁 HUMAN OVERSIGHT</div>
+    <div class="tiers-grid reveal">
+      <div class="tier-card">
+        <span class="tier-badge">Tier 1</span>
+        <span class="tier-icon">🔑</span>
+        <div class="tier-name">Hash Registry</div>
+        <div class="tier-desc">SHA-256 fingerprint checked against every previously cleared file. Known files resolve in under a second.</div>
+        <div class="tier-time">⚡ Instant</div>
+      </div>
+      <div class="tier-card">
+        <span class="tier-badge">Tier 2</span>
+        <span class="tier-icon">⚙️</span>
+        <div class="tier-name">Automated Scan</div>
+        <div class="tier-desc">VirusTotal, CrowdStrike, Network, and Registry engines fire in parallel — each contributing a weighted threat signal.</div>
+        <div class="tier-time">⏱ 8–12 minutes</div>
+      </div>
+      <div class="tier-card">
+        <span class="tier-badge">Tier 3</span>
+        <span class="tier-icon">🧠</span>
+        <div class="tier-name">AI Analysis</div>
+        <div class="tier-desc">An LLM reviews all tool outputs alongside historical assessments via RAG, producing a scored draft report.</div>
+        <div class="tier-time">🤖 AI layer</div>
+      </div>
+      <div class="tier-card">
+        <span class="tier-badge">Tier 4</span>
+        <span class="tier-icon">👥</span>
+        <div class="tier-name">Human Review</div>
+        <div class="tier-desc">Analysts only see pre-drafted reports on complex or high-risk cases. No more manual data collection.</div>
+        <div class="tier-time">👁 Human oversight</div>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- BENTO FEATURES -->
-<div class="bento">
-  <div class="bento-grid">
+<section class="section bento-section">
+  <div class="section-inner">
+    <div class="bento-grid">
 
-    <div class="bento-card bc1 reveal">
-      <div class="bento-label">CONFIDENCE ENGINE</div>
-      <div class="bento-title">A risk score you can actually trust.</div>
-      <div class="bento-desc">Weighted signals from four engines. RAG-boosted by historical data. LLM-calibrated by nuanced reasoning. One number that drives automated action.</div>
-      <div class="mini-score">
-        <div>
-          <div class="mini-score-num" style="color:#ff9500">67</div>
-          <span class="mini-score-label" style="color:#ff9500;letter-spacing:.12em">MEDIUM RISK — ANALYST REVIEW</span>
+      <div class="bento-card bc1 reveal">
+        <div class="bento-label">Confidence engine</div>
+        <div class="bento-title">A risk score you can actually trust.</div>
+        <div class="bento-desc">Weighted signals from four engines. RAG-boosted by historical data. LLM-calibrated by nuanced reasoning. One number that drives automated action.</div>
+        <div class="mini-score">
+          <div>
+            <div class="mini-score-num" style="color:#D97706">67</div>
+            <div class="mini-score-label" style="color:#D97706">Medium risk — Analyst review</div>
+          </div>
+          <div class="mini-score-slash">/100</div>
         </div>
-        <div class="mini-score-slash">/100</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:67%;background:#D97706;"></div></div>
       </div>
-      <div class="mini-bar"><div class="mini-bar-fill" style="width:67%;background:#ff9500"></div></div>
-    </div>
 
-    <div class="bento-card bc2 reveal">
-      <div class="bento-label">DUAL TARGET</div>
-      <div class="bento-title">Files &amp; URLs.</div>
-      <div class="bento-desc">Scan executables, archives, and installers — or submit any URL or domain for reputation analysis. One tool, both surfaces.</div>
-      <div style="margin-top:20px;display:flex;gap:10px;">
-        <div style="padding:8px 14px;border:1px solid #2a3340;font-family:var(--mono);font-size:11px;color:#00d4ff">📁 FILE</div>
-        <div style="padding:8px 14px;border:1px solid #2a3340;font-family:var(--mono);font-size:11px;color:#00d4ff">🌐 URL</div>
+      <div class="bento-card bc2 reveal">
+        <div class="bento-label">Dual target</div>
+        <div class="bento-title">Files &amp; URLs.</div>
+        <div class="bento-desc">Scan executables, archives, and installers — or submit any URL for reputation analysis.</div>
+        <div class="type-tags">
+          <div class="type-tag">📁 File</div>
+          <div class="type-tag">🌐 URL</div>
+        </div>
       </div>
-    </div>
 
-    <div class="bento-card bc3 reveal">
-      <div class="bento-label">THROUGHPUT</div>
-      <div class="bento-stat-big">500</div>
-      <div class="bento-stat-sub">ASSESSMENTS / YEAR</div>
-      <div class="bento-desc" style="margin-top:12px;">Handles your full annual volume — with room to grow.</div>
-    </div>
+      <div class="bento-card bc3 reveal">
+        <div class="bento-label">Throughput</div>
+        <div class="bento-stat-big">500</div>
+        <div class="bento-stat-sub">Assessments / year</div>
+        <div class="bento-desc" style="margin-top:12px;">Handles your full annual volume — with room to grow.</div>
+      </div>
 
-    <div class="bento-card bc4 reveal">
-      <div class="bento-label">AUTO-RESOLVE RATE</div>
-      <div class="bento-stat-big" style="color:var(--safe)">70%</div>
-      <div class="bento-stat-sub">NO ANALYST NEEDED</div>
-      <div class="bento-desc" style="margin-top:12px;">Score ≥ 85 triggers instant ticket closure and requester notification.</div>
-    </div>
+      <div class="bento-card bc4 reveal">
+        <div class="bento-label">Auto-resolve rate</div>
+        <div class="bento-stat-big" style="color:#22C55E">70%</div>
+        <div class="bento-stat-sub">No analyst needed</div>
+        <div class="bento-desc" style="margin-top:12px;">Score ≥ 85 triggers instant ticket closure and requester notification.</div>
+      </div>
 
-    <div class="bento-card bc5 reveal">
-      <div class="bento-label">OUTPUT</div>
-      <div class="bento-title">PDF reports, instantly.</div>
-      <div class="bento-desc">Every scan produces a branded, shareable PDF — risk score, engine breakdown, AI summary, routing verdict.</div>
-    </div>
+      <div class="bento-card bc5 reveal">
+        <div class="bento-label">Output</div>
+        <div class="bento-title">PDF reports, instantly.</div>
+        <div class="bento-desc">Every scan produces a branded, shareable PDF — risk score, engine breakdown, AI summary, routing verdict.</div>
+      </div>
 
+    </div>
   </div>
-</div>
+</section>
 
 <!-- PRICING -->
-<section class="pricing" id="pricing">
-  <div class="section-eyebrow reveal">PRICING</div>
-  <h2 class="section-title reveal">Start free.<br/>Scale when ready.</h2>
+<section class="section pricing-section" id="pricing">
+  <div class="section-inner">
+    <div class="section-eyebrow reveal">Pricing</div>
+    <h2 class="section-title reveal">Start free. Scale when ready.</h2>
 
-  <div class="plans-grid reveal">
-    <div class="plan-card">
-      <div class="plan-name">STARTER</div>
-      <div class="plan-price">$0<span>/mo</span></div>
-      <div class="plan-billing">Free forever · no card required</div>
-      <div class="plan-divider"></div>
-      <div class="plan-feature"><span class="pf-check">✓</span>50 scans / month</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>File &amp; URL scanning</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>AI risk summary</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>PDF report export</div>
-      <div class="plan-feature"><span class="pf-x">✗</span>Hash registry</div>
-      <div class="plan-feature"><span class="pf-x">✗</span>Dashboard &amp; history</div>
-      <div class="plan-feature"><span class="pf-x">✗</span>API access</div>
-      <a href="portal.html" class="plan-btn plan-btn-ghost">Get Started Free</a>
-    </div>
+    <div class="plans-grid reveal">
+      <div class="plan-card">
+        <div class="plan-name">Starter</div>
+        <div class="plan-price">$0<span>/mo</span></div>
+        <div class="plan-billing">Free forever · no card required</div>
+        <div class="plan-divider"></div>
+        <div class="plan-feature"><span class="pf-check">✓</span>50 scans / month</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>File &amp; URL scanning</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>AI risk summary</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>PDF report export</div>
+        <div class="plan-feature"><span class="pf-x">✗</span>Hash registry</div>
+        <div class="plan-feature"><span class="pf-x">✗</span>Dashboard &amp; history</div>
+        <div class="plan-feature"><span class="pf-x">✗</span>API access</div>
+        <a href="portal.html" class="plan-btn plan-btn-ghost">Get started free</a>
+      </div>
 
-    <div class="plan-card featured">
-      <div class="plan-featured-badge">MOST POPULAR</div>
-      <div class="plan-name">PROFESSIONAL</div>
-      <div class="plan-price">$199<span>/mo</span></div>
-      <div class="plan-billing">Billed monthly · cancel anytime</div>
-      <div class="plan-divider"></div>
-      <div class="plan-feature"><span class="pf-check">✓</span>500 scans / month</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>File &amp; URL scanning</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>AI risk summary</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>PDF report export</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>Hash registry (Tier 1)</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>Dashboard &amp; scan history</div>
-      <div class="plan-feature"><span class="pf-x">✗</span>API access</div>
-      <a href="#" class="plan-btn plan-btn-accent">Start Free Trial</a>
-    </div>
+      <div class="plan-card featured">
+        <div class="plan-featured-badge">Most popular</div>
+        <div class="plan-name">Professional</div>
+        <div class="plan-price">$199<span>/mo</span></div>
+        <div class="plan-billing">Billed monthly · cancel anytime</div>
+        <div class="plan-divider"></div>
+        <div class="plan-feature"><span class="pf-check">✓</span>500 scans / month</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>File &amp; URL scanning</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>AI risk summary</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>PDF report export</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>Hash registry (Tier 1)</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>Dashboard &amp; scan history</div>
+        <div class="plan-feature"><span class="pf-x">✗</span>API access</div>
+        <a href="#" class="plan-btn plan-btn-accent">Start free trial</a>
+      </div>
 
-    <div class="plan-card">
-      <div class="plan-name">ENTERPRISE</div>
-      <div class="plan-price">Custom</div>
-      <div class="plan-billing">Annual contract · SLA included</div>
-      <div class="plan-divider"></div>
-      <div class="plan-feature"><span class="pf-check">✓</span>Unlimited scans</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>File &amp; URL scanning</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>AI risk summary</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>PDF report export</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>Hash registry (Tier 1)</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>Dashboard &amp; scan history</div>
-      <div class="plan-feature"><span class="pf-check">✓</span>API access + ServiceNow</div>
-      <a href="/cdn-cgi/l/email-protection#d2bab7bebebd92a1b7b1a7a0b7b1bab7b1b9fcbbbd" class="plan-btn plan-btn-ghost">Contact Sales</a>
+      <div class="plan-card">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price">Custom</div>
+        <div class="plan-billing">Annual contract · SLA included</div>
+        <div class="plan-divider"></div>
+        <div class="plan-feature"><span class="pf-check">✓</span>Unlimited scans</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>File &amp; URL scanning</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>AI risk summary</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>PDF report export</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>Hash registry (Tier 1)</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>Dashboard &amp; scan history</div>
+        <div class="plan-feature"><span class="pf-check">✓</span>API access + ServiceNow</div>
+        <a href="mailto:hello@meisentis.com" class="plan-btn plan-btn-ghost">Contact sales</a>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- CTA -->
-<section class="cta-strip">
+<section class="cta-section">
+  <div class="cta-bg"></div>
   <h2 class="cta-title reveal">Ready to reclaim your analysts' time?</h2>
   <p class="cta-sub reveal">Run your first scan in under 2 minutes. No setup. No credit card.</p>
-  <a href="portal.html" class="btn-primary reveal">Launch Free Scan →</a>
+  <a href="portal.html" class="btn-primary reveal" style="position:relative;">Launch free scan →</a>
 </section>
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">© 2026 SECURECHECK · SSA AGENT MVP v0.1</div>
+  <div class="footer-logo">© 2026 Meisentis · meisentis.com</div>
   <div class="footer-links">
-    <a href="#" class="footer-link">PRIVACY</a>
-    <a href="#" class="footer-link">TERMS</a>
-    <a href="/cdn-cgi/l/email-protection#d2bab7bebebd92a1b7b1a7a0b7b1bab7b1b9fcbbbd" class="footer-link">CONTACT</a>
+    <a href="#" class="footer-link">Privacy</a>
+    <a href="#" class="footer-link">Terms</a>
+    <a href="mailto:hello@meisentis.com" class="footer-link">Contact</a>
   </div>
 </footer>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 injectNav('landing');
 
 // Scroll reveal
 const observer = new IntersectionObserver(entries => {
-  entries.forEa
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
