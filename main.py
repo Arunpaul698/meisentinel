@@ -10,6 +10,7 @@ from pdf_report import generate_pdf
 from static_analysis import analyze_static
 from threat_intel import lookup_hash, lookup_url
 from code_signing import check_signing
+from sca import scan_sca
 
 app = FastAPI(title="SSA Agent MVP")
 
@@ -75,6 +76,7 @@ def compute_risk_score(
     static: dict | None = None,
     threat: dict | None = None,
     signing: dict | None = None,
+    sca: dict | None = None,
 ) -> int:
     malicious  = vt_stats.get("malicious", 0)
     suspicious = vt_stats.get("suspicious", 0)
@@ -84,20 +86,23 @@ def compute_risk_score(
     static_score  = static["score_contribution"]  if static  else 0
     threat_score  = threat["score_contribution"]  if threat  else 0
     signing_score = signing["score_contribution"] if signing else 0
+    sca_score     = sca["score_contribution"]     if sca     else 0
 
-    # Weights: VT 55%, static 20%, threat intel 15%, code signing 10%
+    # Weights: VT 50%, static 18%, threat intel 14%, code signing 8%, SCA 10%
     blended = round(
-        vt_score * 0.55
-        + static_score * 0.20
-        + threat_score * 0.15
-        + signing_score * 0.10
+        vt_score * 0.50
+        + static_score * 0.18
+        + threat_score * 0.14
+        + signing_score * 0.08
+        + sca_score * 0.10
     )
 
-    # Any confirmed threat-intel hit, invalid signature, or high static finding → floor at MEDIUM
-    threat_hits    = threat and threat.get("findings")
-    static_highs   = static and [f for f in static.get("findings", []) if f["severity"] == "high"]
-    invalid_sig    = signing and not signing.get("verified") and signing.get("signed")
-    if threat_hits or static_highs or invalid_sig:
+    # Hard floors: any of these independently guarantees at least MEDIUM
+    threat_hits  = threat and threat.get("findings")
+    static_highs = static and [f for f in static.get("findings", []) if f["severity"] == "high"]
+    invalid_sig  = signing and signing.get("signed") and signing.get("verified") is False
+    critical_cve = sca and any(f["severity"] == "high" for f in sca.get("findings", []))
+    if threat_hits or static_highs or invalid_sig or critical_cve:
         blended = max(blended, 35)
 
     return min(100, blended)
@@ -120,6 +125,7 @@ async def llm_summary(
     static: dict | None = None,
     threat: dict | None = None,
     signing: dict | None = None,
+    sca: dict | None = None,
 ) -> str:
     if not ANTHROPIC_API_KEY:
         return "AI summary unavailable — ANTHROPIC_API_KEY not configured on the server."
@@ -139,6 +145,11 @@ async def llm_summary(
             extra += f"\nCode Signing: valid Authenticode signature by {signing.get('signer') or 'unknown'}"
         elif signing.get("findings"):
             extra += f"\nCode Signing: {json.dumps([f['detail'] for f in signing['findings']])}"
+
+    if sca and sca.get("applicable") and sca.get("findings"):
+        top = [f["detail"] for f in sca["findings"] if f["severity"] == "high"][:3]
+        if top:
+            extra += f"\nSCA / Known CVEs: {json.dumps(top)}"
 
     prompt = (
         f"You are a software security analyst. Summarize this multi-signal scan result "
@@ -197,16 +208,17 @@ async def scan_file(file: UploadFile = File(...)):
     file_bytes = await file.read()
     sha256     = hashlib.sha256(file_bytes).hexdigest()
 
-    vt_stats, static, threat, signing = await asyncio.gather(
+    vt_stats, static, threat, signing, sca = await asyncio.gather(
         vt_scan_file(file_bytes, file.filename),
         analyze_static(file_bytes, file.filename),
         lookup_hash(sha256),
         check_signing(file_bytes, file.filename),
+        scan_sca(file_bytes, file.filename),
     )
 
-    score        = compute_risk_score(vt_stats, static, threat, signing)
+    score        = compute_risk_score(vt_stats, static, threat, signing, sca)
     label, color = risk_label(score)
-    summary      = await llm_summary(file.filename, vt_stats, score, static, threat, signing)
+    summary      = await llm_summary(file.filename, vt_stats, score, static, threat, signing, sca)
     return {
         "target":          file.filename,
         "type":            "file",
@@ -215,6 +227,7 @@ async def scan_file(file: UploadFile = File(...)):
         "static_analysis": static,
         "threat_intel":    threat,
         "code_signing":    signing,
+        "sca":             sca,
         "risk_score":      score,
         "risk_label":      label,
         "risk_color":      color,
