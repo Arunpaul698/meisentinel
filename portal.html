@@ -60,6 +60,7 @@
       padding: 44px 24px; text-align: center;
       background: #F8FAFC; cursor: pointer;
       transition: all 0.15s; margin-bottom: 20px;
+      display: block;
     }
     .dropzone:hover, .dropzone.drag-over {
       border-color: #64748B; background: #F1F5F9;
@@ -337,8 +338,7 @@
 
     <!-- File panel -->
     <div class="file-panel" id="file-panel">
-      <div class="dropzone" id="dropzone"
-           onclick="document.getElementById('file-input').click()"
+      <label class="dropzone" id="dropzone" for="file-input"
            ondragover="handleDragOver(event)"
            ondragleave="handleDragLeave(event)"
            ondrop="handleDrop(event)">
@@ -346,7 +346,7 @@
         <div class="dz-title">Drop your file here</div>
         <div class="dz-sub">or <span>browse to upload</span> &nbsp;·&nbsp; Max 500MB</div>
         <div class="dz-filename" id="dz-filename" style="display:none;"></div>
-      </div>
+      </label>
       <input type="file" id="file-input" onchange="handleFileSelect(event)" />
       <button class="file-scan-btn" id="file-scan-btn" onclick="runFileScan()" disabled>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
