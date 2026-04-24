@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from pdf_report import generate_pdf
 from static_analysis import analyze_static
 from threat_intel import lookup_hash, lookup_url
+from code_signing import check_signing
 
 app = FastAPI(title="SSA Agent MVP")
 
@@ -73,22 +74,30 @@ def compute_risk_score(
     vt_stats: dict,
     static: dict | None = None,
     threat: dict | None = None,
+    signing: dict | None = None,
 ) -> int:
     malicious  = vt_stats.get("malicious", 0)
     suspicious = vt_stats.get("suspicious", 0)
     total      = sum(vt_stats.values()) or 1
     vt_score   = min(100, round(((malicious / total * 80) + (suspicious / total * 20)) * 100))
 
-    static_score = static["score_contribution"] if static else 0
-    threat_score = threat["score_contribution"] if threat else 0
+    static_score  = static["score_contribution"]  if static  else 0
+    threat_score  = threat["score_contribution"]  if threat  else 0
+    signing_score = signing["score_contribution"] if signing else 0
 
-    # Weights: VT 60%, static 20%, threat intel 20%
-    blended = round(vt_score * 0.6 + static_score * 0.2 + threat_score * 0.2)
+    # Weights: VT 55%, static 20%, threat intel 15%, code signing 10%
+    blended = round(
+        vt_score * 0.55
+        + static_score * 0.20
+        + threat_score * 0.15
+        + signing_score * 0.10
+    )
 
-    # Any confirmed threat-intel hit or high-severity static finding → floor at MEDIUM
-    threat_hits   = threat and threat.get("findings")
-    static_highs  = static and [f for f in static.get("findings", []) if f["severity"] == "high"]
-    if threat_hits or static_highs:
+    # Any confirmed threat-intel hit, invalid signature, or high static finding → floor at MEDIUM
+    threat_hits    = threat and threat.get("findings")
+    static_highs   = static and [f for f in static.get("findings", []) if f["severity"] == "high"]
+    invalid_sig    = signing and not signing.get("verified") and signing.get("signed")
+    if threat_hits or static_highs or invalid_sig:
         blended = max(blended, 35)
 
     return min(100, blended)
@@ -110,6 +119,7 @@ async def llm_summary(
     score: int,
     static: dict | None = None,
     threat: dict | None = None,
+    signing: dict | None = None,
 ) -> str:
     if not ANTHROPIC_API_KEY:
         return "AI summary unavailable — ANTHROPIC_API_KEY not configured on the server."
@@ -123,6 +133,12 @@ async def llm_summary(
 
     if threat and threat.get("findings"):
         extra += f"\nThreat Intelligence: {json.dumps([f['detail'] for f in threat['findings']])}"
+
+    if signing and signing.get("applicable"):
+        if signing.get("verified") is True:
+            extra += f"\nCode Signing: valid Authenticode signature by {signing.get('signer') or 'unknown'}"
+        elif signing.get("findings"):
+            extra += f"\nCode Signing: {json.dumps([f['detail'] for f in signing['findings']])}"
 
     prompt = (
         f"You are a software security analyst. Summarize this multi-signal scan result "
@@ -181,15 +197,16 @@ async def scan_file(file: UploadFile = File(...)):
     file_bytes = await file.read()
     sha256     = hashlib.sha256(file_bytes).hexdigest()
 
-    vt_stats, static, threat = await asyncio.gather(
+    vt_stats, static, threat, signing = await asyncio.gather(
         vt_scan_file(file_bytes, file.filename),
         analyze_static(file_bytes, file.filename),
         lookup_hash(sha256),
+        check_signing(file_bytes, file.filename),
     )
 
-    score        = compute_risk_score(vt_stats, static, threat)
+    score        = compute_risk_score(vt_stats, static, threat, signing)
     label, color = risk_label(score)
-    summary      = await llm_summary(file.filename, vt_stats, score, static, threat)
+    summary      = await llm_summary(file.filename, vt_stats, score, static, threat, signing)
     return {
         "target":          file.filename,
         "type":            "file",
@@ -197,6 +214,7 @@ async def scan_file(file: UploadFile = File(...)):
         "vt_stats":        vt_stats,
         "static_analysis": static,
         "threat_intel":    threat,
+        "code_signing":    signing,
         "risk_score":      score,
         "risk_label":      label,
         "risk_color":      color,
