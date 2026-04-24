@@ -3,6 +3,9 @@ import hashlib
 import httpx
 import asyncio
 import json
+import tempfile
+import shutil
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -52,6 +55,20 @@ async def vt_scan_file(file_bytes: bytes, filename: str) -> dict:
         resp.raise_for_status()
         analysis_id = resp.json()["data"]["id"]
         return await vt_poll(client, analysis_id)
+
+
+async def vt_lookup_hash(sha256: str) -> dict:
+    """Hash-only VT lookup — no file upload. Used for files > 32 MB."""
+    headers = {"x-apikey": VIRUSTOTAL_API_KEY}
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            r = await client.get(f"{VT_BASE}/files/{sha256}", headers=headers)
+            if r.status_code == 404:
+                return {}
+            r.raise_for_status()
+            return r.json()["data"]["attributes"]["last_analysis_stats"]
+        except Exception:
+            return {}
 
 
 async def vt_scan_url(url: str) -> dict:
@@ -200,6 +217,82 @@ async def llm_summary(
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+_CHUNK_DIR = Path(tempfile.gettempdir()) / "meisentinel_chunks"
+_CHUNK_DIR.mkdir(exist_ok=True)
+_VT_DIRECT_LIMIT = 32 * 1024 * 1024  # 32 MB — VT free API limit
+
+
+@app.post("/upload/chunk")
+async def upload_chunk(
+    session_id: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    chunk: UploadFile = File(...),
+):
+    session_dir = _CHUNK_DIR / session_id
+    session_dir.mkdir(exist_ok=True)
+    chunk_path = session_dir / f"{chunk_index:05d}"
+    chunk_path.write_bytes(await chunk.read())
+    return {"received": chunk_index, "total": total_chunks}
+
+
+@app.post("/upload/finalize")
+async def upload_finalize(
+    session_id: str = Form(...),
+    filename: str = Form(...),
+    total_chunks: int = Form(...),
+):
+    if not VIRUSTOTAL_API_KEY:
+        raise HTTPException(400, "VIRUSTOTAL_API_KEY not set on server")
+
+    session_dir = _CHUNK_DIR / session_id
+    if not session_dir.exists():
+        raise HTTPException(404, "Upload session not found")
+
+    # Reassemble chunks
+    chunks = sorted(session_dir.iterdir(), key=lambda p: p.name)
+    if len(chunks) != total_chunks:
+        raise HTTPException(400, f"Expected {total_chunks} chunks, got {len(chunks)}")
+
+    file_bytes = b"".join(p.read_bytes() for p in chunks)
+    shutil.rmtree(session_dir, ignore_errors=True)
+
+    sha256 = hashlib.sha256(file_bytes).hexdigest()
+
+    # Files > 32 MB: hash-only VT lookup; smaller files upload to VT
+    if len(file_bytes) > _VT_DIRECT_LIMIT:
+        vt_task = vt_lookup_hash(sha256)
+    else:
+        vt_task = vt_scan_file(file_bytes, filename)
+
+    vt_stats, static, threat, signing, sca = await asyncio.gather(
+        vt_task,
+        analyze_static(file_bytes, filename),
+        lookup_hash(sha256),
+        check_signing(file_bytes, filename),
+        scan_sca(file_bytes, filename),
+    )
+
+    score        = compute_risk_score(vt_stats, static, threat, signing, sca)
+    label, color = risk_label(score)
+    summary      = await llm_summary(filename, vt_stats, score, static, threat, signing, sca)
+    return {
+        "target":          filename,
+        "type":            "file",
+        "sha256":          sha256,
+        "vt_stats":        vt_stats,
+        "static_analysis": static,
+        "threat_intel":    threat,
+        "code_signing":    signing,
+        "sca":             sca,
+        "risk_score":      score,
+        "risk_label":      label,
+        "risk_color":      color,
+        "summary":         summary,
+        "note":            "VT hash-only lookup (file >32MB)" if len(file_bytes) > _VT_DIRECT_LIMIT else None,
+    }
+
 
 @app.post("/scan/file")
 async def scan_file(file: UploadFile = File(...)):

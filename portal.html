@@ -344,7 +344,7 @@
            ondrop="handleDrop(event)">
         <div class="dz-icon">📄</div>
         <div class="dz-title">Drop your file here</div>
-        <div class="dz-sub">or <span>browse to upload</span> &nbsp;·&nbsp; Max 32MB</div>
+        <div class="dz-sub">or <span>browse to upload</span> &nbsp;·&nbsp; Max 500MB</div>
         <div class="dz-filename" id="dz-filename" style="display:none;"></div>
       </div>
       <input type="file" id="file-input" onchange="handleFileSelect(event)" />
@@ -671,20 +671,53 @@
   }
 
   /* ── Run file scan ───────────────────────────────────────────── */
+  const CHUNK_SIZE   = 10 * 1024 * 1024;  // 10 MB per chunk
+  const DIRECT_LIMIT = 32 * 1024 * 1024;  // use chunked above 32 MB
+
   async function runFileScan() {
     if (!selectedFile) return;
     resetTiers();
-    showLoading('Uploading to VirusTotal…');
-    setTier(1, 'done');
-    setTier(2, 'pending');
-
-    const form = new FormData();
-    form.append('file', selectedFile);
 
     try {
-      const resp = await fetch(`${BACKEND}/scan/file`, { method: 'POST', body: form });
-      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
-      const data = await resp.json();
+      let data;
+      if (selectedFile.size <= DIRECT_LIMIT) {
+        // ── Small file: direct upload ──────────────────────────
+        showLoading('Uploading to VirusTotal…');
+        setTier(1, 'done'); setTier(2, 'pending');
+        const form = new FormData();
+        form.append('file', selectedFile);
+        const resp = await fetch(`${BACKEND}/scan/file`, { method: 'POST', body: form });
+        if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+        data = await resp.json();
+      } else {
+        // ── Large file: chunked upload ─────────────────────────
+        const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+        const sessionId   = crypto.randomUUID();
+
+        for (let i = 0; i < totalChunks; i++) {
+          const pct  = Math.round((i / totalChunks) * 100);
+          showLoading(`Uploading… ${pct}% (chunk ${i + 1}/${totalChunks})`);
+          const slice = selectedFile.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+          const form  = new FormData();
+          form.append('session_id',   sessionId);
+          form.append('chunk_index',  i);
+          form.append('total_chunks', totalChunks);
+          form.append('chunk',        slice, selectedFile.name);
+          const r = await fetch(`${BACKEND}/upload/chunk`, { method: 'POST', body: form });
+          if (!r.ok) throw new Error(`Chunk ${i} upload failed (${r.status})`);
+        }
+
+        showLoading('Analysing file…');
+        setTier(1, 'done'); setTier(2, 'pending');
+        const form = new FormData();
+        form.append('session_id',   sessionId);
+        form.append('filename',     selectedFile.name);
+        form.append('total_chunks', totalChunks);
+        const resp = await fetch(`${BACKEND}/upload/finalize`, { method: 'POST', body: form });
+        if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+        data = await resp.json();
+      }
+
       setTier(2, 'done'); setTier(3, 'pending');
       setTimeout(() => { setTier(3, 'done'); renderResult(data); }, 800);
     } catch (err) {
