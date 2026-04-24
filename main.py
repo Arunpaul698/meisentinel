@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pdf_report import generate_pdf
 from static_analysis import analyze_static
+from threat_intel import lookup_hash, lookup_url
 
 app = FastAPI(title="SSA Agent MVP")
 
@@ -68,23 +69,28 @@ async def vt_scan_url(url: str) -> dict:
 
 # ── Risk scoring ──────────────────────────────────────────────────────────────
 
-def compute_risk_score(vt_stats: dict, static: dict | None = None) -> int:
+def compute_risk_score(
+    vt_stats: dict,
+    static: dict | None = None,
+    threat: dict | None = None,
+) -> int:
     malicious  = vt_stats.get("malicious", 0)
     suspicious = vt_stats.get("suspicious", 0)
     total      = sum(vt_stats.values()) or 1
-    vt_score   = (malicious / total * 80) + (suspicious / total * 20)
-    vt_score   = min(100, round(vt_score * 100))
+    vt_score   = min(100, round(((malicious / total * 80) + (suspicious / total * 20)) * 100))
 
-    if not static or not static.get("findings"):
-        return vt_score
+    static_score = static["score_contribution"] if static else 0
+    threat_score = threat["score_contribution"] if threat else 0
 
-    static_score = static["score_contribution"]
-    # Blend: VT carries 70%, static 30%; either can independently floor the result
-    blended = round(vt_score * 0.7 + static_score * 0.3)
-    # A high-severity static finding guarantees at least MEDIUM risk
-    high_findings = [f for f in static["findings"] if f["severity"] == "high"]
-    if high_findings:
+    # Weights: VT 60%, static 20%, threat intel 20%
+    blended = round(vt_score * 0.6 + static_score * 0.2 + threat_score * 0.2)
+
+    # Any confirmed threat-intel hit or high-severity static finding → floor at MEDIUM
+    threat_hits   = threat and threat.get("findings")
+    static_highs  = static and [f for f in static.get("findings", []) if f["severity"] == "high"]
+    if threat_hits or static_highs:
         blended = max(blended, 35)
+
     return min(100, blended)
 
 
@@ -98,18 +104,25 @@ def risk_label(score: int) -> tuple:
 
 # ── Claude AI summary ─────────────────────────────────────────────────────────
 
-async def llm_summary(target: str, vt_stats: dict, score: int, static: dict | None = None) -> str:
+async def llm_summary(
+    target: str,
+    vt_stats: dict,
+    score: int,
+    static: dict | None = None,
+    threat: dict | None = None,
+) -> str:
     if not ANTHROPIC_API_KEY:
         return "AI summary unavailable — ANTHROPIC_API_KEY not configured on the server."
 
-    static_section = ""
+    extra = ""
     if static and static.get("findings"):
         high = [f["detail"] for f in static["findings"] if f["severity"] == "high"]
         med  = [f["detail"] for f in static["findings"] if f["severity"] == "medium"]
         if high or med:
-            static_section = (
-                f"\nStatic Analysis Findings: {json.dumps({'high': high, 'medium': med})}"
-            )
+            extra += f"\nStatic Analysis: {json.dumps({'high': high, 'medium': med})}"
+
+    if threat and threat.get("findings"):
+        extra += f"\nThreat Intelligence: {json.dumps([f['detail'] for f in threat['findings']])}"
 
     prompt = (
         f"You are a software security analyst. Summarize this multi-signal scan result "
@@ -117,7 +130,7 @@ async def llm_summary(target: str, vt_stats: dict, score: int, static: dict | No
         f"Target: {target}\n"
         f"Risk Score: {score}/100\n"
         f"VirusTotal Stats: {json.dumps(vt_stats)}"
-        f"{static_section}\n\n"
+        f"{extra}\n\n"
         f"Be direct. State if it's safe or not, why, and what action to take. "
         f"Do not use bullet points. Plain paragraph only."
     )
@@ -168,20 +181,22 @@ async def scan_file(file: UploadFile = File(...)):
     file_bytes = await file.read()
     sha256     = hashlib.sha256(file_bytes).hexdigest()
 
-    vt_stats, static = await asyncio.gather(
+    vt_stats, static, threat = await asyncio.gather(
         vt_scan_file(file_bytes, file.filename),
         analyze_static(file_bytes, file.filename),
+        lookup_hash(sha256),
     )
 
-    score        = compute_risk_score(vt_stats, static)
+    score        = compute_risk_score(vt_stats, static, threat)
     label, color = risk_label(score)
-    summary      = await llm_summary(file.filename, vt_stats, score, static)
+    summary      = await llm_summary(file.filename, vt_stats, score, static, threat)
     return {
         "target":          file.filename,
         "type":            "file",
         "sha256":          sha256,
         "vt_stats":        vt_stats,
         "static_analysis": static,
+        "threat_intel":    threat,
         "risk_score":      score,
         "risk_label":      label,
         "risk_color":      color,
@@ -193,18 +208,23 @@ async def scan_file(file: UploadFile = File(...)):
 async def scan_url(url: str = Form(...)):
     if not VIRUSTOTAL_API_KEY:
         raise HTTPException(400, "VIRUSTOTAL_API_KEY not set on server")
-    vt_stats     = await vt_scan_url(url)
-    score        = compute_risk_score(vt_stats)
+    vt_stats, threat = await asyncio.gather(
+        vt_scan_url(url),
+        lookup_url(url),
+    )
+
+    score        = compute_risk_score(vt_stats, threat=threat)
     label, color = risk_label(score)
-    summary      = await llm_summary(url, vt_stats, score)
+    summary      = await llm_summary(url, vt_stats, score, threat=threat)
     return {
-        "target":     url,
-        "type":       "url",
-        "vt_stats":   vt_stats,
-        "risk_score": score,
-        "risk_label": label,
-        "risk_color": color,
-        "summary":    summary,
+        "target":       url,
+        "type":         "url",
+        "vt_stats":     vt_stats,
+        "threat_intel": threat,
+        "risk_score":   score,
+        "risk_label":   label,
+        "risk_color":   color,
+        "summary":      summary,
     }
 
 
