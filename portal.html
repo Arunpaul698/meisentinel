@@ -60,6 +60,7 @@
       padding: 44px 24px; text-align: center;
       background: #F8FAFC; cursor: pointer;
       transition: all 0.15s; margin-bottom: 20px;
+      display: block;
     }
     .dropzone:hover, .dropzone.drag-over {
       border-color: #64748B; background: #F1F5F9;
@@ -126,7 +127,7 @@
       transition: background 0.15s;
     }
     .file-scan-btn:hover  { background: #1E293B; }
-    .file-scan-btn:disabled { background: #94A3B8; cursor: not-allowed; }
+    .file-scan-btn.inactive { background: #94A3B8; cursor: not-allowed; pointer-events: none; }
 
     /* ── Loading state ───────────────────────────────── */
     .loading-card { display: none; }
@@ -337,8 +338,7 @@
 
     <!-- File panel -->
     <div class="file-panel" id="file-panel">
-      <div class="dropzone" id="dropzone"
-           onclick="document.getElementById('file-input').click()"
+      <label class="dropzone" id="dropzone" for="file-input"
            ondragover="handleDragOver(event)"
            ondragleave="handleDragLeave(event)"
            ondrop="handleDrop(event)">
@@ -346,9 +346,9 @@
         <div class="dz-title">Drop your file here</div>
         <div class="dz-sub">or <span>browse to upload</span> &nbsp;·&nbsp; Max 500MB</div>
         <div class="dz-filename" id="dz-filename" style="display:none;"></div>
-      </div>
+      </label>
       <input type="file" id="file-input" onchange="handleFileSelect(event)" />
-      <button class="file-scan-btn" id="file-scan-btn" onclick="runFileScan()" disabled>
+      <button class="file-scan-btn inactive" id="file-scan-btn" onclick="runFileScan()">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <circle cx="6" cy="6" r="4.5" stroke="white" stroke-width="1.4"/>
           <path d="M9.5 9.5L12.5 12.5" stroke="white" stroke-width="1.4" stroke-linecap="round"/>
@@ -531,7 +531,7 @@
     fn.textContent = f.name;
     fn.style.display = 'inline-block';
     document.getElementById('dz-title').textContent = 'File selected';
-    document.getElementById('file-scan-btn').disabled = false;
+    document.getElementById('file-scan-btn').classList.remove('inactive');
   }
 
   /* ── Progress bar animation ──────────────────────────────────── */
@@ -793,7 +793,7 @@
     document.getElementById('error-card').classList.remove('visible');
     document.getElementById('dz-filename').style.display = 'none';
     document.getElementById('dz-title').textContent = 'Drop your file here';
-    document.getElementById('file-scan-btn').disabled = true;
+    document.getElementById('file-scan-btn').classList.add('inactive');
     document.getElementById('url-input').value = '';
     document.getElementById('file-input').value = '';
     document.getElementById('progress-fill').style.width = '0%';
