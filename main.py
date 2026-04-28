@@ -6,12 +6,16 @@ import asyncio
 import json
 import tempfile
 import shutil
+import secrets
+import time
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from pdf_report import generate_pdf
 from static_analysis import analyze_static
@@ -33,9 +37,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-VIRUSTOTAL_API_KEY  = os.getenv("VIRUSTOTAL_API_KEY", "")
-ANTHROPIC_API_KEY   = os.getenv("ANTHROPIC_API_KEY", "")
-MEISENTIS_MCP_TOKEN = os.getenv("MEISENTIS_MCP_TOKEN", "")
+VIRUSTOTAL_API_KEY   = os.getenv("VIRUSTOTAL_API_KEY",   "")
+ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY",    "")
+MEISENTIS_MCP_TOKEN  = os.getenv("MEISENTIS_MCP_TOKEN",  "")
+GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID",     "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_FRONTEND_URL  = os.getenv("GOOGLE_FRONTEND_URL",  "https://meisentis.com/oauth.html")
 VT_BASE = "https://www.virustotal.com/api/v3"
 
 _bearer = HTTPBearer(auto_error=False)
@@ -346,6 +353,37 @@ def _build_sca_model(sc: dict | None) -> Optional[SCAResult]:
     )
 
 
+# ── Streaming helper (prevents Render proxy idle-timeout on long scans) ───────
+
+async def _stream_json(coro) -> StreamingResponse:
+    """
+    Wrap an async scan coroutine in a StreamingResponse.
+    Emits a '\n' keepalive every 10 s to prevent Render's 55 s idle timeout,
+    then writes the JSON result on the final line.
+    Frontend must read the full body and parse the last non-empty line as JSON.
+    """
+    async def _gen():
+        result: dict = {}
+
+        async def _run():
+            try:
+                result["data"] = await coro
+            except Exception as exc:
+                result["error"] = str(exc)
+
+        task = asyncio.create_task(_run())
+        while not task.done():
+            await asyncio.sleep(10)
+            if not task.done():
+                yield b"\n"   # keepalive — keeps the TCP stream alive
+        if "error" in result:
+            yield json.dumps({"error": result["error"]}).encode()
+        else:
+            yield json.dumps(result["data"]).encode()
+
+    return StreamingResponse(_gen(), media_type="application/json")
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 _CHUNK_DIR = Path(tempfile.gettempdir()) / "meisentinel_chunks"
@@ -404,24 +442,26 @@ async def upload_finalize(
         scan_sca(file_bytes, filename),
     )
 
-    score        = compute_risk_score(vt_stats, static, threat, signing, sca)
-    label, color = risk_label(score)
-    summary      = await llm_summary(filename, vt_stats, score, static, threat, signing, sca)
-    return {
-        "target":          filename,
-        "type":            "file",
-        "sha256":          sha256,
-        "vt_stats":        vt_stats,
-        "static_analysis": static,
-        "threat_intel":    threat,
-        "code_signing":    signing,
-        "sca":             sca,
-        "risk_score":      score,
-        "risk_label":      label,
-        "risk_color":      color,
-        "summary":         summary,
-        "note":            "VT hash-only lookup (file >32MB)" if len(file_bytes) > _VT_DIRECT_LIMIT else None,
-    }
+    async def _finalize_scan():
+        score        = compute_risk_score(vt_stats, static, threat, signing, sca)
+        label, color = risk_label(score)
+        summary      = await llm_summary(filename, vt_stats, score, static, threat, signing, sca)
+        return {
+            "target":          filename,
+            "type":            "file",
+            "sha256":          sha256,
+            "vt_stats":        vt_stats,
+            "static_analysis": static,
+            "threat_intel":    threat,
+            "code_signing":    signing,
+            "sca":             sca,
+            "risk_score":      score,
+            "risk_label":      label,
+            "risk_color":      color,
+            "summary":         summary,
+            "note":            "VT hash-only lookup (file >32MB)" if len(file_bytes) > _VT_DIRECT_LIMIT else None,
+        }
+    return await _stream_json(_finalize_scan())
 
 
 @app.post("/scan/file")
@@ -430,56 +470,57 @@ async def scan_file(file: UploadFile = File(...)):
         raise HTTPException(400, "VIRUSTOTAL_API_KEY not set on server")
     file_bytes = await file.read()
     sha256     = hashlib.sha256(file_bytes).hexdigest()
+    filename   = file.filename
 
-    vt_stats, static, threat, signing, sca = await asyncio.gather(
-        vt_scan_file(file_bytes, file.filename),
-        analyze_static(file_bytes, file.filename),
-        lookup_hash(sha256),
-        check_signing(file_bytes, file.filename),
-        scan_sca(file_bytes, file.filename),
-    )
-
-    score        = compute_risk_score(vt_stats, static, threat, signing, sca)
-    label, color = risk_label(score)
-    summary      = await llm_summary(file.filename, vt_stats, score, static, threat, signing, sca)
-    return {
-        "target":          file.filename,
-        "type":            "file",
-        "sha256":          sha256,
-        "vt_stats":        vt_stats,
-        "static_analysis": static,
-        "threat_intel":    threat,
-        "code_signing":    signing,
-        "sca":             sca,
-        "risk_score":      score,
-        "risk_label":      label,
-        "risk_color":      color,
-        "summary":         summary,
-    }
+    async def _do():
+        vt_stats, static, threat, signing, sca = await asyncio.gather(
+            vt_scan_file(file_bytes, filename),
+            analyze_static(file_bytes, filename),
+            lookup_hash(sha256),
+            check_signing(file_bytes, filename),
+            scan_sca(file_bytes, filename),
+        )
+        score        = compute_risk_score(vt_stats, static, threat, signing, sca)
+        label, color = risk_label(score)
+        summary      = await llm_summary(filename, vt_stats, score, static, threat, signing, sca)
+        return {
+            "target":          filename,
+            "type":            "file",
+            "sha256":          sha256,
+            "vt_stats":        vt_stats,
+            "static_analysis": static,
+            "threat_intel":    threat,
+            "code_signing":    signing,
+            "sca":             sca,
+            "risk_score":      score,
+            "risk_label":      label,
+            "risk_color":      color,
+            "summary":         summary,
+        }
+    return await _stream_json(_do())
 
 
 @app.post("/scan/url")
 async def scan_url(url: str = Form(...)):
     if not VIRUSTOTAL_API_KEY:
         raise HTTPException(400, "VIRUSTOTAL_API_KEY not set on server")
-    vt_stats, threat = await asyncio.gather(
-        vt_scan_url(url),
-        lookup_url(url),
-    )
 
-    score        = compute_risk_score(vt_stats, threat=threat)
-    label, color = risk_label(score)
-    summary      = await llm_summary(url, vt_stats, score, threat=threat)
-    return {
-        "target":       url,
-        "type":         "url",
-        "vt_stats":     vt_stats,
-        "threat_intel": threat,
-        "risk_score":   score,
-        "risk_label":   label,
-        "risk_color":   color,
-        "summary":      summary,
-    }
+    async def _do():
+        vt_stats, threat = await asyncio.gather(vt_scan_url(url), lookup_url(url))
+        score        = compute_risk_score(vt_stats, threat=threat)
+        label, color = risk_label(score)
+        summary      = await llm_summary(url, vt_stats, score, threat=threat)
+        return {
+            "target":       url,
+            "type":         "url",
+            "vt_stats":     vt_stats,
+            "threat_intel": threat,
+            "risk_score":   score,
+            "risk_label":   label,
+            "risk_color":   color,
+            "summary":      summary,
+        }
+    return await _stream_json(_do())
 
 
 @app.post("/report/pdf")
@@ -500,9 +541,124 @@ async def export_pdf(scan_data: dict):
 @app.get("/health")
 def health():
     return {
-        "status": "ok",
-        "virustotal_key_set": bool(VIRUSTOTAL_API_KEY),
-        "anthropic_key_set":  bool(ANTHROPIC_API_KEY),
+        "status":                       "ok",
+        "virustotal_key_set":           bool(VIRUSTOTAL_API_KEY),
+        "anthropic_key_set":            bool(ANTHROPIC_API_KEY),
+        "google_workspace_configured":  bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
+    }
+
+
+# ── Google Workspace OAuth Audit ───────────────────────────────────────────────
+
+from google_workspace import build_auth_url, exchange_code, get_admin_email, fetch_and_score_all_apps  # noqa: E402
+
+# In-memory session store: {session_id → session_dict}
+# Each session: {status, admin, created, progress, apps, error}
+_WS_SESSIONS: dict[str, dict] = {}
+_WS_SESSION_TTL = 3600  # 1 hour
+
+
+def _evict_stale():
+    now = time.time()
+    for k in [k for k, v in _WS_SESSIONS.items() if now - v["created"] > _WS_SESSION_TTL]:
+        del _WS_SESSIONS[k]
+
+
+def _new_session(admin: str = "") -> tuple[str, dict]:
+    sid  = uuid.uuid4().hex
+    sess = {
+        "status":   "fetching",
+        "admin":    admin,
+        "created":  time.time(),
+        "progress": {"message": "Starting…", "users_found": 0, "total_apps": 0, "apps_processed": 0},
+        "apps":     None,
+        "error":    None,
+    }
+    _WS_SESSIONS[sid] = sess
+    return sid, sess
+
+
+@app.get("/workspace/auth-url")
+async def workspace_auth_url():
+    """Return Google OAuth2 consent URL. Frontend redirects the browser to it."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(503, "Google OAuth not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET")
+    _evict_stale()
+    state = uuid.uuid4().hex
+    # Stash state temporarily as a pre-session so we can validate it in the callback
+    _WS_SESSIONS[state] = {"status": "awaiting_callback", "created": time.time()}
+    return {"url": build_auth_url(state)}
+
+
+@app.get("/workspace/callback")
+async def workspace_callback(
+    code:  Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Google redirects here after user consents. Exchanges code and starts background fetch."""
+    _evict_stale()
+    if error:
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error={error}", status_code=302)
+    if not code or not state:
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error=missing_params", status_code=302)
+    pre = _WS_SESSIONS.get(state)
+    if not pre or pre.get("status") != "awaiting_callback":
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error=invalid_state", status_code=302)
+    del _WS_SESSIONS[state]
+
+    try:
+        tokens       = await exchange_code(code)
+        access_token = tokens["access_token"]
+        admin_email  = await get_admin_email(access_token)
+        sid, sess    = _new_session(admin_email)
+        asyncio.create_task(
+            fetch_and_score_all_apps(
+                access_token=access_token,
+                vt_key=VIRUSTOTAL_API_KEY,
+                anthropic_key=ANTHROPIC_API_KEY,
+                session=sess,
+            )
+        )
+        return RedirectResponse(
+            f"{GOOGLE_FRONTEND_URL}?session={sid}&admin={admin_email}",
+            status_code=302,
+        )
+    except Exception as exc:
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error={exc}", status_code=302)
+
+
+@app.get("/workspace/status")
+async def workspace_status(session: str):
+    """Frontend polls this while data is loading."""
+    _evict_stale()
+    sess = _WS_SESSIONS.get(session)
+    if not sess or sess["status"] == "awaiting_callback":
+        raise HTTPException(404, "Session not found or expired — please reconnect.")
+    return {
+        "status":   sess["status"],
+        "admin":    sess.get("admin", ""),
+        "progress": sess["progress"],
+        "error":    sess.get("error"),
+    }
+
+
+@app.get("/workspace/apps")
+async def workspace_apps(session: str):
+    """Return full app list when status == done."""
+    _evict_stale()
+    sess = _WS_SESSIONS.get(session)
+    if not sess or sess["status"] == "awaiting_callback":
+        raise HTTPException(404, "Session not found or expired — please reconnect.")
+    if sess["status"] == "fetching":
+        return {"status": "fetching", "progress": sess["progress"]}
+    if sess["status"] == "error":
+        raise HTTPException(500, sess.get("error", "Unknown error during fetch"))
+    return {
+        "status":     "done",
+        "admin":      sess.get("admin", ""),
+        "apps":       sess["apps"],
+        "fetched_at": datetime.utcnow().isoformat() + "Z",
     }
 
 
