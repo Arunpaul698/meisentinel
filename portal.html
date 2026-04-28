@@ -670,6 +670,19 @@
     document.getElementById('result-card').classList.add('visible');
   }
 
+  /* ── Streaming-response parser ──────────────────────────────── */
+  async function _fetchScan(url, options) {
+    const resp = await fetch(url, options);
+    if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+    // Backend emits '\n' keepalives then final JSON on the last line
+    const text  = await resp.text();
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) throw new Error('Empty response from server');
+    const data = JSON.parse(lines[lines.length - 1]);
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
+
   /* ── Run file scan ───────────────────────────────────────────── */
   const CHUNK_SIZE   = 10 * 1024 * 1024;  // 10 MB per chunk
   const DIRECT_LIMIT = 32 * 1024 * 1024;  // use chunked above 32 MB
@@ -686,9 +699,7 @@
         setTier(1, 'done'); setTier(2, 'pending');
         const form = new FormData();
         form.append('file', selectedFile);
-        const resp = await fetch(`${BACKEND}/scan/file`, { method: 'POST', body: form });
-        if (!resp.ok) throw new Error(`Server error ${resp.status}`);
-        data = await resp.json();
+        data = await _fetchScan(`${BACKEND}/scan/file`, { method: 'POST', body: form });
       } else {
         // ── Large file: chunked upload ─────────────────────────
         const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
@@ -713,9 +724,7 @@
         form.append('session_id',   sessionId);
         form.append('filename',     selectedFile.name);
         form.append('total_chunks', totalChunks);
-        const resp = await fetch(`${BACKEND}/upload/finalize`, { method: 'POST', body: form });
-        if (!resp.ok) throw new Error(`Server error ${resp.status}`);
-        data = await resp.json();
+        data = await _fetchScan(`${BACKEND}/upload/finalize`, { method: 'POST', body: form });
       }
 
       setTier(2, 'done'); setTier(3, 'pending');
@@ -739,20 +748,11 @@
     form.append('url', url);
 
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180000); // 3 min max
-      const resp = await fetch(`${BACKEND}/scan/url`, { method: 'POST', body: form, signal: controller.signal });
-      clearTimeout(timeout);
-      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
-      const data = await resp.json();
+      const data = await _fetchScan(`${BACKEND}/scan/url`, { method: 'POST', body: form });
       setTier(2, 'done'); setTier(3, 'pending');
       setTimeout(() => { setTier(3, 'done'); renderResult(data); }, 800);
     } catch (err) {
-      if (err.name === 'AbortError') {
-        showError('Scan timed out after 3 minutes. The backend may be starting up — please try again.');
-      } else {
-        showError(err.message || 'Scan failed. The backend may be waking up — wait 30s and try again.');
-      }
+      showError(err.message || 'Scan failed. The backend may be waking up — wait 30s and try again.');
     } finally {
       document.getElementById('url-scan-btn').disabled = false;
     }
