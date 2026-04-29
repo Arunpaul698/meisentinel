@@ -634,5 +634,382 @@
     </div>
   </div>
 
+
+  <script>
+  (() => {
+    // ── Constants ──────────────────────────────────────────────────────────
+    const POLL_INTERVAL = 3000;
+
+    // ── State ──────────────────────────────────────────────────────────────
+    let _sessionId   = null;
+    let _adminEmail  = null;
+    let _allApps     = [];
+    let _filter      = 'all';
+    let _search      = '';
+    let _pollTimer   = null;
+    let _openApp     = null;
+
+    // ── DOM refs ───────────────────────────────────────────────────────────
+    const states = {
+      connect:   document.getElementById('state-connect'),
+      loading:   document.getElementById('state-loading'),
+      dashboard: document.getElementById('state-dashboard'),
+      error:     document.getElementById('state-error'),
+    };
+
+    function showState(name) {
+      Object.entries(states).forEach(([k, el]) => {
+        el.classList.toggle('active', k === name);
+      });
+    }
+
+    // ── Boot ───────────────────────────────────────────────────────────────
+    function boot() {
+      const params = new URLSearchParams(location.search);
+      const err    = params.get('error');
+      const sid    = params.get('session');
+      const admin  = params.get('admin');
+
+      if (err) {
+        showError(decodeURIComponent(err));
+        return;
+      }
+      if (sid) {
+        _sessionId  = sid;
+        _adminEmail = admin || '';
+        // Clean URL without triggering navigation
+        history.replaceState({}, '', location.pathname);
+        showState('loading');
+        startPolling();
+        return;
+      }
+      showState('connect');
+    }
+
+    // ── Connect ────────────────────────────────────────────────────────────
+    document.getElementById('btn-connect').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-connect');
+      btn.textContent = 'Connecting…';
+      btn.disabled = true;
+      try {
+        const r = await fetch(BACKEND + '/workspace/auth-url');
+        if (!r.ok) throw new Error(`Server error ${r.status}`);
+        const { url } = await r.json();
+        location.href = url;
+      } catch (e) {
+        btn.textContent = 'Continue with Google';
+        btn.disabled = false;
+        showError(e.message);
+      }
+    });
+
+    // ── Polling ────────────────────────────────────────────────────────────
+    // Progress message → which step is active
+    const _STEP_MAP = [
+      { key: 'step-users',     patterns: ['fetching workspace', 'fetching user'] },
+      { key: 'step-tokens',    patterns: ['scanning tokens', 'found ', 'aggregating'] },
+      { key: 'step-activity',  patterns: ['activity', 'fetching activity', 'unique apps'] },
+      { key: 'step-scoring',   patterns: ['reputation', 'checking', 'enrichment'] },
+      { key: 'step-summaries', patterns: ['summar', 'complete'] },
+    ];
+
+    function _classifyStep(msg) {
+      const lc = msg.toLowerCase();
+      for (let i = _STEP_MAP.length - 1; i >= 0; i--) {
+        if (_STEP_MAP[i].patterns.some(p => lc.includes(p))) return i;
+      }
+      return 0;
+    }
+
+    function updateLoadingUI(progress) {
+      const msg   = progress?.message || 'Working…';
+      const idx   = _classifyStep(msg);
+      document.getElementById('loading-status-text').textContent = msg;
+      _STEP_MAP.forEach(({ key }, i) => {
+        const el = document.getElementById(key);
+        if (!el) return;
+        el.className = i < idx ? 'step-done' : i === idx ? 'step-active' : 'step-wait';
+      });
+    }
+
+    function startPolling() {
+      clearInterval(_pollTimer);
+      _pollTimer = setInterval(poll, POLL_INTERVAL);
+      poll(); // immediate first call
+    }
+
+    async function poll() {
+      try {
+        const r = await fetch(`${BACKEND}/workspace/status?session=${_sessionId}`);
+        if (r.status === 404) { clearInterval(_pollTimer); showError('Session expired — please reconnect.'); return; }
+        if (!r.ok) throw new Error(`Status ${r.status}`);
+        const data = await r.json();
+
+        updateLoadingUI(data.progress);
+
+        if (data.status === 'done') {
+          clearInterval(_pollTimer);
+          await loadApps();
+        } else if (data.status === 'error') {
+          clearInterval(_pollTimer);
+          showError(data.error || 'An error occurred during the audit.');
+        }
+      } catch (e) {
+        // network blip — keep polling
+        console.warn('Poll error:', e.message);
+      }
+    }
+
+    // ── Load apps ──────────────────────────────────────────────────────────
+    async function loadApps() {
+      try {
+        const r = await fetch(`${BACKEND}/workspace/apps?session=${_sessionId}`);
+        if (!r.ok) throw new Error(`Apps fetch failed: ${r.status}`);
+        const data = await r.json();
+        if (data.status !== 'done') { startPolling(); return; }
+        _allApps = data.apps || [];
+        renderDashboard();
+        showState('dashboard');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    // ── Dashboard rendering ────────────────────────────────────────────────
+    function renderDashboard() {
+      const total  = _allApps.length;
+      const remove = _allApps.filter(a => a.tier === 'remove').length;
+      const review = _allApps.filter(a => a.tier === 'review').length;
+      const ai     = _allApps.filter(a => a.is_ai).length;
+
+      document.getElementById('stat-total').textContent  = total;
+      document.getElementById('stat-remove').textContent = remove;
+      document.getElementById('stat-review').textContent = review;
+      document.getElementById('stat-ai').textContent     = ai;
+
+      renderTable();
+    }
+
+    function filteredApps() {
+      return _allApps.filter(a => {
+        if (_filter === 'remove' && a.tier !== 'remove') return false;
+        if (_filter === 'review' && a.tier !== 'review') return false;
+        if (_filter === 'keep'   && a.tier !== 'keep')   return false;
+        if (_filter === 'ai'     && !a.is_ai)            return false;
+        if (_search) {
+          const q = _search.toLowerCase();
+          if (!a.name.toLowerCase().includes(q) && !a.domain.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('app-tbody');
+      const apps  = filteredApps();
+      if (!apps.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="table-empty">No apps match this filter.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = apps.map((a, i) => {
+        const score     = a.score ?? 0;
+        const cls       = a.risk_class || (score >= 70 ? 'risk-high' : score >= 35 ? 'risk-med' : 'risk-low');
+        const barCls    = score >= 70 ? '' : score >= 35 ? 'med' : 'low';
+        const numCls    = score >= 70 ? 'high' : score >= 35 ? 'med' : 'low';
+        const lastSeen  = a.last_seen ? relativeDate(a.last_seen) : 'Never';
+        const aiPill    = a.is_ai ? `<span class="ai-badge">🤖 AI</span>` : '';
+        const scopeCount = (a.scopes || []).length;
+        const globalIdx = _allApps.indexOf(a);
+        return `<tr>
+          <td>
+            <div class="app-name-cell">
+              <div class="app-icon">${appEmoji(a.name)}</div>
+              <div>
+                <div class="app-name">${esc(a.name)} ${aiPill}</div>
+                <div class="app-domain">${esc(a.domain || a.client_id || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td class="col-scopes"><span class="scope-count">${scopeCount} scope${scopeCount !== 1 ? 's' : ''}</span></td>
+          <td class="col-last-seen"><span class="last-seen">${lastSeen}</span></td>
+          <td class="col-score">
+            <div class="score-bar-wrap">
+              <span class="score-num ${numCls}">${score}</span>
+              <div class="score-bar"><div class="score-bar-fill ${barCls}" style="width:${score}%"></div></div>
+            </div>
+          </td>
+          <td><button class="btn-details" data-idx="${globalIdx}">Details</button></td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.btn-details').forEach(btn => {
+        btn.addEventListener('click', () => openModal(_allApps[+btn.dataset.idx]));
+      });
+    }
+
+    // ── Filters ────────────────────────────────────────────────────────────
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        _filter = chip.dataset.filter;
+        renderTable();
+      });
+    });
+
+    document.getElementById('app-search').addEventListener('input', e => {
+      _search = e.target.value.trim();
+      renderTable();
+    });
+
+    // ── CSV export ─────────────────────────────────────────────────────────
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const apps = filteredApps();
+      const rows = [
+        ['Name', 'Domain', 'Score', 'Tier', 'AI tool', 'Scopes', 'Last seen', 'Users'].join(','),
+        ...apps.map(a => [
+          csvCell(a.name),
+          csvCell(a.domain || ''),
+          a.score ?? 0,
+          a.tier || '',
+          a.is_ai ? 'Yes' : 'No',
+          (a.scopes || []).length,
+          a.last_seen ? a.last_seen.slice(0, 10) : 'never',
+          (a.users || []).length,
+        ].join(',')),
+      ];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = 'workspace-oauth-audit.csv'; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // ── Modal ──────────────────────────────────────────────────────────────
+    function openModal(app) {
+      _openApp = app;
+      const score  = app.score ?? 0;
+      const numCls = score >= 70 ? 'high' : score >= 35 ? 'med' : 'low';
+
+      document.getElementById('modal-app-name').textContent  = app.name;
+      document.getElementById('modal-app-domain').textContent = app.domain || app.client_id || '';
+      document.getElementById('modal-icon').textContent       = appEmoji(app.name);
+
+      const scoreEl = document.getElementById('modal-score');
+      scoreEl.textContent = score;
+      scoreEl.className   = `modal-score-value ${numCls}`;
+
+      const verdict = document.getElementById('modal-verdict');
+      verdict.className   = app.risk_class || (score >= 70 ? 'risk-high' : score >= 35 ? 'risk-med' : 'risk-low');
+      verdict.textContent = app.risk_label || (score >= 70 ? 'REMOVE' : score >= 35 ? 'REVIEW' : 'KEEP');
+
+      // Scope pills
+      const pillsEl = document.getElementById('modal-scopes');
+      const details = app.scope_details || (app.scopes || []).map(s => ({ scope: s, label: s, severity: 'medium' }));
+      pillsEl.innerHTML = details.map(d =>
+        `<span class="scope-pill ${d.severity}" title="${esc(d.scope)}">${esc(d.label)}</span>`
+      ).join('') || '<span style="color:#94A3B8;font-size:13px">No scopes recorded</span>';
+
+      // Recommendation
+      document.getElementById('modal-recommendation').textContent =
+        app.summary || 'No AI recommendation available for this app.';
+
+      document.getElementById('app-modal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('app-modal').classList.remove('open');
+      _openApp = null;
+    }
+
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('app-modal').addEventListener('click', e => {
+      if (e.target === document.getElementById('app-modal')) closeModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    document.getElementById('modal-btn-keep').addEventListener('click', () => closeModal());
+    document.getElementById('modal-btn-remove').addEventListener('click', () => {
+      if (!_openApp) return;
+      const name = _openApp.name;
+      closeModal();
+      // Show a confirmation note — actual revocation requires Workspace admin console
+      const note = document.createElement('div');
+      note.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0F1923;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;z-index:200;max-width:90vw;text-align:center';
+      note.textContent = `To revoke "${name}", visit Google Admin > Security > API Controls > App Access Control.`;
+      document.body.appendChild(note);
+      setTimeout(() => note.remove(), 6000);
+    });
+
+    // ── Error state ────────────────────────────────────────────────────────
+    function showError(msg) {
+      const msgEl  = document.getElementById('error-msg');
+      const codeEl = document.getElementById('error-code');
+      // OAuth error codes get a friendly message
+      const friendly = {
+        'access_denied':   'You denied access. Please try again and approve the required permissions.',
+        'invalid_state':   'The OAuth state token was invalid. Please try again.',
+        'missing_params':  'The OAuth callback was missing required parameters.',
+      };
+      msgEl.textContent = friendly[msg] || 'Something went wrong. See details below.';
+      if (friendly[msg]) {
+        codeEl.style.display = 'none';
+      } else {
+        codeEl.style.display = 'block';
+        codeEl.textContent   = msg;
+      }
+      showState('error');
+    }
+
+    document.getElementById('btn-retry').addEventListener('click', () => {
+      history.replaceState({}, '', location.pathname);
+      _sessionId = null; _allApps = []; _filter = 'all'; _search = '';
+      showState('connect');
+    });
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function csvCell(s) {
+      s = String(s);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s;
+    }
+    function relativeDate(iso) {
+      const d    = new Date(iso);
+      const days = Math.floor((Date.now() - d) / 86400000);
+      if (isNaN(days))  return 'Unknown';
+      if (days === 0)   return 'Today';
+      if (days === 1)   return 'Yesterday';
+      if (days < 30)    return `${days}d ago`;
+      if (days < 365)   return `${Math.floor(days / 30)}mo ago`;
+      return `${Math.floor(days / 365)}y ago`;
+    }
+    function appEmoji(name) {
+      const n = name.toLowerCase();
+      if (n.includes('slack'))      return '💬';
+      if (n.includes('zoom'))       return '📹';
+      if (n.includes('github'))     return '🐙';
+      if (n.includes('notion'))     return '📝';
+      if (n.includes('salesforce')) return '☁️';
+      if (n.includes('hubspot'))    return '🔶';
+      if (n.includes('jira') || n.includes('atlassian')) return '🔷';
+      if (n.includes('dropbox'))    return '📦';
+      if (n.includes('box'))        return '📦';
+      if (n.includes('figma'))      return '🎨';
+      if (n.includes('zapier'))     return '⚡';
+      if (n.includes('stripe'))     return '💳';
+      if (n.includes('docusign'))   return '✍️';
+      if (n.includes('grammarly'))  return '✏️';
+      if (n.includes('gong') || n.includes('chorus')) return '🎙️';
+      if (n.includes('zoom'))       return '📹';
+      return '📱';
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    boot();
+  })();
+  </script>
+
 </body>
 </html>
