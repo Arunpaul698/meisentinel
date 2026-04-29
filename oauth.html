@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace Audit — Meisentis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="shared.js"></script>
+
+  <style>
+    /* ── Reset & base ───────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: #F7F8FA; color: #0F1923; -webkit-font-smoothing: antialiased; }
+
+    /* ── Layout ─────────────────────────────────────── */
+    .page { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* ── Page header ─────────────────────────────────── */
+    .page-eyebrow {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      color: #94A3B8; letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .page-title { font-size: 26px; font-weight: 600; letter-spacing: -0.4px; margin-bottom: 6px; }
+    .page-sub   { font-size: 14px; color: #64748B; line-height: 1.5; margin-bottom: 32px; }
+
+    /* ── Card shell ─────────────────────────────────── */
+    .card {
+      background: #fff;
+      border: 1px solid #E8ECF0;
+      border-radius: 16px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .card-pad { padding: 28px; }
+
+    /* ── Risk badge classes ──────────────────────────── */
+    .risk-high {
+      display: inline-block;
+      background: #FEF2F2; color: #DC2626;
+      border: 1px solid #FECACA;
+      font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+      padding: 3px 8px; border-radius: 6px; letter-spacing: 0.03em;
+    }
+    .risk-med {
+      display: inline-block;
+      background: #FFFBEB; color: #D97706;
+      border: 1px solid #FDE68A;
+      font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+      padding: 3px 8px; border-radius: 6px; letter-spacing: 0.03em;
+    }
+    .risk-low {
+      display: inline-block;
+      background: #F0FDF4; color: #16A34A;
+      border: 1px solid #BBF7D0;
+      font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+      padding: 3px 8px; border-radius: 6px; letter-spacing: 0.03em;
+    }
+
+    /* ── State visibility ────────────────────────────── */
+    .state { display: none; }
+    .state.active { display: block; }
+
+    /* ═══════════════════════════════════════════════════
+       STATE 1 — Connect
+    ═══════════════════════════════════════════════════ */
+    #state-connect { max-width: 520px; margin: 40px auto; }
+
+    .connect-logo {
+      width: 56px; height: 56px; background: #F1F5F9;
+      border: 1px solid #E8ECF0; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; margin-bottom: 20px;
+    }
+
+    .connect-title {
+      font-size: 22px; font-weight: 600; letter-spacing: -0.3px;
+      margin-bottom: 8px;
+    }
+    .connect-sub {
+      font-size: 14px; color: #64748B; line-height: 1.55;
+      margin-bottom: 28px;
+    }
+
+    .perm-list {
+      list-style: none;
+      background: #F8FAFC; border: 1px solid #E8ECF0;
+      border-radius: 12px; padding: 18px 20px;
+      margin-bottom: 24px;
+    }
+    .perm-list li {
+      font-size: 13px; color: #334155;
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid #F1F5F9;
+    }
+    .perm-list li:last-child { border-bottom: none; }
+    .perm-icon { font-size: 15px; margin-top: 1px; flex-shrink: 0; }
+    .perm-text strong { display: block; font-weight: 500; color: #0F1923; }
+    .perm-text span  { font-size: 12px; color: #94A3B8; }
+
+    .btn-connect {
+      width: 100%;
+      background: #0F1923; color: #fff;
+      border: none; border-radius: 10px;
+      padding: 14px 20px;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center;
+      justify-content: center; gap: 10px;
+      transition: background 0.15s;
+    }
+    .btn-connect:hover { background: #1E2D3D; }
+    .btn-connect svg { flex-shrink: 0; }
+
+    .connect-note {
+      font-size: 12px; color: #94A3B8; text-align: center;
+      margin-top: 14px; line-height: 1.5;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       STATE 2 — Loading
+    ═══════════════════════════════════════════════════ */
+    #state-loading { max-width: 480px; margin: 80px auto; text-align: center; }
+
+    .spinner {
+      width: 44px; height: 44px; margin: 0 auto 24px;
+      border: 3px solid #E8ECF0; border-top-color: #0F1923;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+    .loading-status {
+      font-size: 13px; color: #64748B; margin-bottom: 28px;
+      min-height: 20px;
+    }
+
+    .loading-steps {
+      list-style: none; text-align: left;
+      background: #fff; border: 1px solid #E8ECF0; border-radius: 12px;
+      overflow: hidden;
+    }
+    .loading-steps li {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 18px; font-size: 13px; color: #64748B;
+      border-bottom: 1px solid #F1F5F9;
+    }
+    .loading-steps li:last-child { border-bottom: none; }
+    .step-icon { font-size: 15px; width: 22px; text-align: center; }
+    .step-done   .step-icon::before { content: "✓"; color: #16A34A; }
+    .step-active .step-icon::before { content: "⋯"; color: #3B82F6; }
+    .step-wait   .step-icon::before { content: "·"; color: #CBD5E1; }
+    .step-done   { color: #0F1923; }
+    .step-active { color: #0F1923; font-weight: 500; }
+
+    /* ═══════════════════════════════════════════════════
+       STATE 3 — Dashboard
+    ═══════════════════════════════════════════════════ */
+    #state-dashboard {}
+
+    /* Stats row */
+    .stats-row {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 14px; margin-bottom: 20px;
+    }
+    .stat-card {
+      background: #fff; border: 1px solid #E8ECF0;
+      border-radius: 12px; padding: 18px 20px;
+    }
+    .stat-label {
+      font-size: 11px; font-weight: 500; color: #94A3B8;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-size: 28px; font-weight: 700; letter-spacing: -0.5px;
+      color: #0F1923;
+    }
+    .stat-value.red    { color: #DC2626; }
+    .stat-value.amber  { color: #D97706; }
+    .stat-value.green  { color: #16A34A; }
+    .stat-sub {
+      font-size: 12px; color: #94A3B8; margin-top: 3px;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .filter-bar input[type="search"] {
+      flex: 1; min-width: 200px;
+      font-family: 'DM Sans', sans-serif; font-size: 13px;
+      background: #fff; border: 1px solid #E8ECF0; border-radius: 8px;
+      padding: 8px 14px; color: #0F1923; outline: none;
+    }
+    .filter-bar input[type="search"]:focus { border-color: #94A3B8; }
+    .filter-bar input::placeholder { color: #CBD5E1; }
+
+    .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      font-size: 12px; font-weight: 500;
+      padding: 5px 12px; border-radius: 20px;
+      border: 1px solid #E8ECF0; background: #fff; color: #64748B;
+      cursor: pointer; user-select: none; transition: all 0.12s;
+    }
+    .chip:hover  { border-color: #94A3B8; color: #0F1923; }
+    .chip.active { background: #0F1923; color: #fff; border-color: #0F1923; }
+
+    .btn-export {
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+      background: #fff; border: 1px solid #E8ECF0; border-radius: 8px;
+      padding: 8px 14px; color: #0F1923; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: background 0.12s;
+    }
+    .btn-export:hover { background: #F1F5F9; }
+
+    /* App table */
+    .table-wrap {
+      background: #fff; border: 1px solid #E8ECF0;
+      border-radius: 16px; overflow: hidden;
+    }
+    .app-table { width: 100%; border-collapse: collapse; }
+    .app-table thead {
+      background: #F8FAFC; border-bottom: 1px solid #E8ECF0;
+    }
+    .app-table th {
+      font-size: 11px; font-weight: 600; color: #94A3B8;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 11px 16px; text-align: left;
+      white-space: nowrap;
+    }
+    .app-table th.col-score { text-align: right; }
+    .app-table td {
+      padding: 14px 16px; font-size: 13px;
+      border-bottom: 1px solid #F1F5F9; vertical-align: middle;
+    }
+    .app-table tr:last-child td { border-bottom: none; }
+    .app-table tr:hover td { background: #F8FAFC; }
+
+    .app-name-cell { display: flex; align-items: center; gap: 10px; }
+    .app-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: #F1F5F9; border: 1px solid #E8ECF0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .app-name { font-weight: 500; color: #0F1923; }
+    .app-domain { font-size: 11px; color: #94A3B8; margin-top: 1px; }
+
+    .ai-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500;
+      color: #7C3AED; background: #F5F3FF; border: 1px solid #DDD6FE;
+      padding: 2px 7px; border-radius: 5px; letter-spacing: 0.03em;
+    }
+
+    .scope-count {
+      font-family: 'DM Mono', monospace; font-size: 12px; color: #64748B;
+    }
+    .last-seen {
+      font-family: 'DM Mono', monospace; font-size: 12px; color: #64748B;
+    }
+
+    .score-bar-wrap { text-align: right; }
+    .score-num {
+      font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500;
+    }
+    .score-num.high  { color: #DC2626; }
+    .score-num.med   { color: #D97706; }
+    .score-num.low   { color: #16A34A; }
+    .score-bar {
+      height: 4px; border-radius: 2px; background: #F1F5F9;
+      margin-top: 4px; width: 80px; display: inline-block;
+      position: relative; overflow: hidden;
+    }
+    .score-bar-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      border-radius: 2px; background: #DC2626;
+    }
+    .score-bar-fill.med  { background: #D97706; }
+    .score-bar-fill.low  { background: #16A34A; }
+
+    .btn-details {
+      font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500;
+      background: none; border: 1px solid #E8ECF0; border-radius: 7px;
+      padding: 5px 12px; color: #64748B; cursor: pointer;
+      transition: all 0.12s;
+    }
+    .btn-details:hover { border-color: #94A3B8; color: #0F1923; }
+
+    .table-empty {
+      padding: 60px 20px; text-align: center;
+      color: #94A3B8; font-size: 14px;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       App Detail Modal
+    ═══════════════════════════════════════════════════ */
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(15, 25, 35, 0.45);
+      z-index: 100;
+      align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: #fff; border-radius: 18px;
+      width: 100%; max-width: 560px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+    }
+
+    .modal-header {
+      padding: 24px 28px 0;
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 16px;
+    }
+    .modal-app-info { display: flex; align-items: center; gap: 14px; }
+    .modal-app-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: #F1F5F9; border: 1px solid #E8ECF0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .modal-app-name  { font-size: 17px; font-weight: 600; }
+    .modal-app-domain { font-size: 13px; color: #64748B; margin-top: 2px; }
+
+    .modal-close {
+      background: none; border: none; cursor: pointer;
+      color: #94A3B8; font-size: 22px; line-height: 1;
+      padding: 4px; border-radius: 6px; transition: color 0.12s;
+    }
+    .modal-close:hover { color: #0F1923; }
+
+    .modal-body { padding: 20px 28px 28px; }
+
+    .modal-score-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #F8FAFC; border: 1px solid #E8ECF0;
+      border-radius: 10px; padding: 14px 18px; margin-bottom: 20px;
+    }
+    .modal-score-label { font-size: 13px; color: #64748B; }
+    .modal-score-value {
+      font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500;
+    }
+
+    .modal-section { margin-bottom: 20px; }
+    .modal-section-title {
+      font-size: 11px; font-weight: 600; color: #94A3B8;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 10px;
+    }
+
+    .scope-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .scope-pill {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      padding: 4px 10px; border-radius: 6px;
+      border: 1px solid;
+    }
+    .scope-pill.critical { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
+    .scope-pill.high     { background: #FFF7ED; color: #EA580C; border-color: #FED7AA; }
+    .scope-pill.medium   { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
+    .scope-pill.low      { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
+
+    .modal-recommendation {
+      background: #F8FAFC; border: 1px solid #E8ECF0;
+      border-radius: 10px; padding: 14px 18px;
+      font-size: 13px; color: #334155; line-height: 1.6;
+    }
+
+    .modal-actions {
+      display: flex; gap: 10px; margin-top: 20px;
+    }
+    .btn-remove {
+      flex: 1; background: #DC2626; color: #fff;
+      border: none; border-radius: 9px;
+      padding: 11px 16px; font-family: 'DM Sans', sans-serif;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-remove:hover { background: #B91C1C; }
+    .btn-keep {
+      flex: 1; background: #fff; color: #0F1923;
+      border: 1px solid #E8ECF0; border-radius: 9px;
+      padding: 11px 16px; font-family: 'DM Sans', sans-serif;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-keep:hover { background: #F1F5F9; }
+
+    /* ═══════════════════════════════════════════════════
+       STATE 4 — Error
+    ═══════════════════════════════════════════════════ */
+    #state-error { max-width: 440px; margin: 80px auto; text-align: center; }
+
+    .error-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      background: #FEF2F2; border: 1px solid #FECACA;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; margin: 0 auto 20px;
+    }
+    .error-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .error-msg   {
+      font-size: 13px; color: #64748B; line-height: 1.55;
+      margin-bottom: 24px;
+    }
+    .error-code {
+      font-family: 'DM Mono', monospace; font-size: 12px;
+      background: #F8FAFC; border: 1px solid #E8ECF0;
+      border-radius: 8px; padding: 10px 14px;
+      color: #DC2626; margin-bottom: 20px;
+      word-break: break-all; text-align: left;
+    }
+    .btn-retry {
+      background: #0F1923; color: #fff;
+      border: none; border-radius: 9px;
+      padding: 12px 28px; font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-retry:hover { background: #1E2D3D; }
+
+    /* ── Responsive ──────────────────────────────────── */
+    @media (max-width: 640px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .app-table .col-scopes,
+      .app-table .col-last-seen { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <p class="page-eyebrow">Google Workspace</p>
+    <h1 class="page-title">OAuth App Risk Audit</h1>
+    <p class="page-sub">Inventory every third-party app with access to your Workspace tenant, score each for risk, and get removal recommendations.</p>
+
+    <!-- ═══ STATE 1: Connect ══════════════════════════════════════════════ -->
+    <div id="state-connect" class="state active">
+      <div class="card card-pad">
+        <div class="connect-logo">🔐</div>
+        <h2 class="connect-title">Connect your Google Workspace</h2>
+        <p class="connect-sub">Sign in as a super-admin to let Meisentis read your tenant's OAuth grants. Read-only access — we never modify anything.</p>
+
+        <ul class="perm-list">
+          <li>
+            <span class="perm-icon">👤</span>
+            <span class="perm-text">
+              <strong>User directory</strong>
+              <span>List all users in your organisation</span>
+            </span>
+          </li>
+          <li>
+            <span class="perm-icon">🔑</span>
+            <span class="perm-text">
+              <strong>OAuth tokens</strong>
+              <span>Read which apps each user has authorised</span>
+            </span>
+          </li>
+          <li>
+            <span class="perm-icon">📊</span>
+            <span class="perm-text">
+              <strong>Audit logs (read-only)</strong>
+              <span>Check last-seen dates for app activity over 180 days</span>
+            </span>
+          </li>
+        </ul>
+
+        <button class="btn-connect" id="btn-connect">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+            <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+          Continue with Google
+        </button>
+        <p class="connect-note">Super-admin privileges required. We request read-only scopes and do not store your data between sessions.</p>
+      </div>
+    </div>
+
+    <!-- ═══ STATE 2: Loading ══════════════════════════════════════════════ -->
+    <div id="state-loading" class="state">
+      <div class="spinner"></div>
+      <h2 class="loading-title">Auditing your Workspace</h2>
+      <p class="loading-status" id="loading-status-text">Connecting to Google APIs…</p>
+      <ul class="loading-steps" id="loading-steps">
+        <li class="step-active" id="step-users">
+          <span class="step-icon"></span>
+          Fetching user directory
+        </li>
+        <li class="step-wait" id="step-tokens">
+          <span class="step-icon"></span>
+          Reading OAuth grants per user
+        </li>
+        <li class="step-wait" id="step-activity">
+          <span class="step-icon"></span>
+          Pulling 180-day activity logs
+        </li>
+        <li class="step-wait" id="step-scoring">
+          <span class="step-icon"></span>
+          Scoring apps &amp; running VirusTotal checks
+        </li>
+        <li class="step-wait" id="step-summaries">
+          <span class="step-icon"></span>
+          Generating AI recommendations
+        </li>
+      </ul>
+    </div>
+
+    <!-- ═══ STATE 3: Dashboard ════════════════════════════════════════════ -->
+    <div id="state-dashboard" class="state">
+
+      <!-- Stats row -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Apps</div>
+          <div class="stat-value" id="stat-total">—</div>
+          <div class="stat-sub">granted OAuth access</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Remove</div>
+          <div class="stat-value red" id="stat-remove">—</div>
+          <div class="stat-sub">score ≥ 70</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Review</div>
+          <div class="stat-value amber" id="stat-review">—</div>
+          <div class="stat-sub">score 35–69</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">AI Tools</div>
+          <div class="stat-value" id="stat-ai">—</div>
+          <div class="stat-sub">detected</div>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <input type="search" id="app-search" placeholder="Search apps…" />
+        <div class="filter-chips">
+          <span class="chip active" data-filter="all">All</span>
+          <span class="chip" data-filter="remove">Remove</span>
+          <span class="chip" data-filter="review">Review</span>
+          <span class="chip" data-filter="keep">Keep</span>
+          <span class="chip" data-filter="ai">AI tools</span>
+        </div>
+        <button class="btn-export" id="btn-export">
+          ↓ Export CSV
+        </button>
+      </div>
+
+      <!-- App table -->
+      <div class="table-wrap">
+        <table class="app-table">
+          <thead>
+            <tr>
+              <th>Application</th>
+              <th class="col-scopes">Scopes</th>
+              <th class="col-last-seen">Last seen</th>
+              <th class="col-score" style="text-align:right">Risk score</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="app-tbody">
+            <!-- Rows injected by JS -->
+            <tr>
+              <td colspan="5" class="table-empty">No apps loaded yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /state-dashboard -->
+
+    <!-- ═══ STATE 4: Error ════════════════════════════════════════════════ -->
+    <div id="state-error" class="state">
+      <div class="error-icon">⚠️</div>
+      <h2 class="error-title">Connection failed</h2>
+      <p class="error-msg" id="error-msg">Could not retrieve data from Google Workspace. This is usually a permissions issue — make sure you are signed in as a super-admin.</p>
+      <div class="error-code" id="error-code" style="display:none"></div>
+      <button class="btn-retry" id="btn-retry">Try again</button>
+    </div>
+
+  </div><!-- /page -->
+
+  <!-- ═══ App Detail Modal ══════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="app-modal" role="dialog" aria-modal="true" aria-labelledby="modal-app-name">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-app-info">
+          <div class="modal-app-icon" id="modal-icon">📦</div>
+          <div>
+            <div class="modal-app-name" id="modal-app-name">App name</div>
+            <div class="modal-app-domain" id="modal-app-domain">domain.com</div>
+          </div>
+        </div>
+        <button class="modal-close" id="modal-close" aria-label="Close">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-score-row">
+          <span class="modal-score-label">Risk score</span>
+          <span class="modal-score-value" id="modal-score">—</span>
+          <span id="modal-verdict"></span>
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-section-title">OAuth Scopes</div>
+          <div class="scope-pills" id="modal-scopes">
+            <!-- Pills injected by JS -->
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-section-title">AI Recommendation</div>
+          <div class="modal-recommendation" id="modal-recommendation">
+            Loading recommendation…
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-keep" id="modal-btn-keep">Keep access</button>
+          <button class="btn-remove" id="modal-btn-remove">Remove access</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+  (() => {
+    // ── Constants ──────────────────────────────────────────────────────────
+    const POLL_INTERVAL = 3000;
+
+    // ── State ──────────────────────────────────────────────────────────────
+    let _sessionId   = null;
+    let _adminEmail  = null;
+    let _allApps     = [];
+    let _filter      = 'all';
+    let _search      = '';
+    let _pollTimer   = null;
+    let _openApp     = null;
+
+    // ── DOM refs ───────────────────────────────────────────────────────────
+    const states = {
+      connect:   document.getElementById('state-connect'),
+      loading:   document.getElementById('state-loading'),
+      dashboard: document.getElementById('state-dashboard'),
+      error:     document.getElementById('state-error'),
+    };
+
+    function showState(name) {
+      Object.entries(states).forEach(([k, el]) => {
+        el.classList.toggle('active', k === name);
+      });
+    }
+
+    // ── Boot ───────────────────────────────────────────────────────────────
+    function boot() {
+      const params = new URLSearchParams(location.search);
+      const err    = params.get('error');
+      const sid    = params.get('session');
+      const admin  = params.get('admin');
+
+      if (err) {
+        showError(decodeURIComponent(err));
+        return;
+      }
+      if (sid) {
+        _sessionId  = sid;
+        _adminEmail = admin || '';
+        // Clean URL without triggering navigation
+        history.replaceState({}, '', location.pathname);
+        showState('loading');
+        startPolling();
+        return;
+      }
+      showState('connect');
+    }
+
+    // ── Connect ────────────────────────────────────────────────────────────
+    document.getElementById('btn-connect').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-connect');
+      btn.textContent = 'Connecting…';
+      btn.disabled = true;
+      try {
+        const r = await fetch(BACKEND + '/workspace/auth-url');
+        if (!r.ok) throw new Error(`Server error ${r.status}`);
+        const { url } = await r.json();
+        location.href = url;
+      } catch (e) {
+        btn.textContent = 'Continue with Google';
+        btn.disabled = false;
+        showError(e.message);
+      }
+    });
+
+    // ── Polling ────────────────────────────────────────────────────────────
+    // Progress message → which step is active
+    const _STEP_MAP = [
+      { key: 'step-users',     patterns: ['fetching workspace', 'fetching user'] },
+      { key: 'step-tokens',    patterns: ['scanning tokens', 'found ', 'aggregating'] },
+      { key: 'step-activity',  patterns: ['activity', 'fetching activity', 'unique apps'] },
+      { key: 'step-scoring',   patterns: ['reputation', 'checking', 'enrichment'] },
+      { key: 'step-summaries', patterns: ['summar', 'complete'] },
+    ];
+
+    function _classifyStep(msg) {
+      const lc = msg.toLowerCase();
+      for (let i = _STEP_MAP.length - 1; i >= 0; i--) {
+        if (_STEP_MAP[i].patterns.some(p => lc.includes(p))) return i;
+      }
+      return 0;
+    }
+
+    function updateLoadingUI(progress) {
+      const msg   = progress?.message || 'Working…';
+      const idx   = _classifyStep(msg);
+      document.getElementById('loading-status-text').textContent = msg;
+      _STEP_MAP.forEach(({ key }, i) => {
+        const el = document.getElementById(key);
+        if (!el) return;
+        el.className = i < idx ? 'step-done' : i === idx ? 'step-active' : 'step-wait';
+      });
+    }
+
+    function startPolling() {
+      clearInterval(_pollTimer);
+      _pollTimer = setInterval(poll, POLL_INTERVAL);
+      poll(); // immediate first call
+    }
+
+    async function poll() {
+      try {
+        const r = await fetch(`${BACKEND}/workspace/status?session=${_sessionId}`);
+        if (r.status === 404) { clearInterval(_pollTimer); showError('Session expired — please reconnect.'); return; }
+        if (!r.ok) throw new Error(`Status ${r.status}`);
+        const data = await r.json();
+
+        updateLoadingUI(data.progress);
+
+        if (data.status === 'done') {
+          clearInterval(_pollTimer);
+          await loadApps();
+        } else if (data.status === 'error') {
+          clearInterval(_pollTimer);
+          showError(data.error || 'An error occurred during the audit.');
+        }
+      } catch (e) {
+        // network blip — keep polling
+        console.warn('Poll error:', e.message);
+      }
+    }
+
+    // ── Load apps ──────────────────────────────────────────────────────────
+    async function loadApps() {
+      try {
+        const r = await fetch(`${BACKEND}/workspace/apps?session=${_sessionId}`);
+        if (!r.ok) throw new Error(`Apps fetch failed: ${r.status}`);
+        const data = await r.json();
+        if (data.status !== 'done') { startPolling(); return; }
+        _allApps = data.apps || [];
+        renderDashboard();
+        showState('dashboard');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    // ── Dashboard rendering ────────────────────────────────────────────────
+    function renderDashboard() {
+      const total  = _allApps.length;
+      const remove = _allApps.filter(a => a.tier === 'remove').length;
+      const review = _allApps.filter(a => a.tier === 'review').length;
+      const ai     = _allApps.filter(a => a.is_ai).length;
+
+      document.getElementById('stat-total').textContent  = total;
+      document.getElementById('stat-remove').textContent = remove;
+      document.getElementById('stat-review').textContent = review;
+      document.getElementById('stat-ai').textContent     = ai;
+
+      renderTable();
+    }
+
+    function filteredApps() {
+      return _allApps.filter(a => {
+        if (_filter === 'remove' && a.tier !== 'remove') return false;
+        if (_filter === 'review' && a.tier !== 'review') return false;
+        if (_filter === 'keep'   && a.tier !== 'keep')   return false;
+        if (_filter === 'ai'     && !a.is_ai)            return false;
+        if (_search) {
+          const q = _search.toLowerCase();
+          if (!a.name.toLowerCase().includes(q) && !a.domain.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('app-tbody');
+      const apps  = filteredApps();
+      if (!apps.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="table-empty">No apps match this filter.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = apps.map((a, i) => {
+        const score     = a.score ?? 0;
+        const cls       = a.risk_class || (score >= 70 ? 'risk-high' : score >= 35 ? 'risk-med' : 'risk-low');
+        const barCls    = score >= 70 ? '' : score >= 35 ? 'med' : 'low';
+        const numCls    = score >= 70 ? 'high' : score >= 35 ? 'med' : 'low';
+        const lastSeen  = a.last_seen ? relativeDate(a.last_seen) : 'Never';
+        const aiPill    = a.is_ai ? `<span class="ai-badge">🤖 AI</span>` : '';
+        const scopeCount = (a.scopes || []).length;
+        const globalIdx = _allApps.indexOf(a);
+        return `<tr>
+          <td>
+            <div class="app-name-cell">
+              <div class="app-icon">${appEmoji(a.name)}</div>
+              <div>
+                <div class="app-name">${esc(a.name)} ${aiPill}</div>
+                <div class="app-domain">${esc(a.domain || a.client_id || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td class="col-scopes"><span class="scope-count">${scopeCount} scope${scopeCount !== 1 ? 's' : ''}</span></td>
+          <td class="col-last-seen"><span class="last-seen">${lastSeen}</span></td>
+          <td class="col-score">
+            <div class="score-bar-wrap">
+              <span class="score-num ${numCls}">${score}</span>
+              <div class="score-bar"><div class="score-bar-fill ${barCls}" style="width:${score}%"></div></div>
+            </div>
+          </td>
+          <td><button class="btn-details" data-idx="${globalIdx}">Details</button></td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.btn-details').forEach(btn => {
+        btn.addEventListener('click', () => openModal(_allApps[+btn.dataset.idx]));
+      });
+    }
+
+    // ── Filters ────────────────────────────────────────────────────────────
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        _filter = chip.dataset.filter;
+        renderTable();
+      });
+    });
+
+    document.getElementById('app-search').addEventListener('input', e => {
+      _search = e.target.value.trim();
+      renderTable();
+    });
+
+    // ── CSV export ─────────────────────────────────────────────────────────
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const apps = filteredApps();
+      const rows = [
+        ['Name', 'Domain', 'Score', 'Tier', 'AI tool', 'Scopes', 'Last seen', 'Users'].join(','),
+        ...apps.map(a => [
+          csvCell(a.name),
+          csvCell(a.domain || ''),
+          a.score ?? 0,
+          a.tier || '',
+          a.is_ai ? 'Yes' : 'No',
+          (a.scopes || []).length,
+          a.last_seen ? a.last_seen.slice(0, 10) : 'never',
+          (a.users || []).length,
+        ].join(',')),
+      ];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = 'workspace-oauth-audit.csv'; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // ── Modal ──────────────────────────────────────────────────────────────
+    function openModal(app) {
+      _openApp = app;
+      const score  = app.score ?? 0;
+      const numCls = score >= 70 ? 'high' : score >= 35 ? 'med' : 'low';
+
+      document.getElementById('modal-app-name').textContent  = app.name;
+      document.getElementById('modal-app-domain').textContent = app.domain || app.client_id || '';
+      document.getElementById('modal-icon').textContent       = appEmoji(app.name);
+
+      const scoreEl = document.getElementById('modal-score');
+      scoreEl.textContent = score;
+      scoreEl.className   = `modal-score-value ${numCls}`;
+
+      const verdict = document.getElementById('modal-verdict');
+      verdict.className   = app.risk_class || (score >= 70 ? 'risk-high' : score >= 35 ? 'risk-med' : 'risk-low');
+      verdict.textContent = app.risk_label || (score >= 70 ? 'REMOVE' : score >= 35 ? 'REVIEW' : 'KEEP');
+
+      // Scope pills
+      const pillsEl = document.getElementById('modal-scopes');
+      const details = app.scope_details || (app.scopes || []).map(s => ({ scope: s, label: s, severity: 'medium' }));
+      pillsEl.innerHTML = details.map(d =>
+        `<span class="scope-pill ${d.severity}" title="${esc(d.scope)}">${esc(d.label)}</span>`
+      ).join('') || '<span style="color:#94A3B8;font-size:13px">No scopes recorded</span>';
+
+      // Recommendation
+      document.getElementById('modal-recommendation').textContent =
+        app.summary || 'No AI recommendation available for this app.';
+
+      document.getElementById('app-modal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('app-modal').classList.remove('open');
+      _openApp = null;
+    }
+
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('app-modal').addEventListener('click', e => {
+      if (e.target === document.getElementById('app-modal')) closeModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    document.getElementById('modal-btn-keep').addEventListener('click', () => closeModal());
+    document.getElementById('modal-btn-remove').addEventListener('click', () => {
+      if (!_openApp) return;
+      const name = _openApp.name;
+      closeModal();
+      // Show a confirmation note — actual revocation requires Workspace admin console
+      const note = document.createElement('div');
+      note.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0F1923;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;z-index:200;max-width:90vw;text-align:center';
+      note.textContent = `To revoke "${name}", visit Google Admin > Security > API Controls > App Access Control.`;
+      document.body.appendChild(note);
+      setTimeout(() => note.remove(), 6000);
+    });
+
+    // ── Error state ────────────────────────────────────────────────────────
+    function showError(msg) {
+      const msgEl  = document.getElementById('error-msg');
+      const codeEl = document.getElementById('error-code');
+      // OAuth error codes get a friendly message
+      const friendly = {
+        'access_denied':   'You denied access. Please try again and approve the required permissions.',
+        'invalid_state':   'The OAuth state token was invalid. Please try again.',
+        'missing_params':  'The OAuth callback was missing required parameters.',
+      };
+      msgEl.textContent = friendly[msg] || 'Something went wrong. See details below.';
+      if (friendly[msg]) {
+        codeEl.style.display = 'none';
+      } else {
+        codeEl.style.display = 'block';
+        codeEl.textContent   = msg;
+      }
+      showState('error');
+    }
+
+    document.getElementById('btn-retry').addEventListener('click', () => {
+      history.replaceState({}, '', location.pathname);
+      _sessionId = null; _allApps = []; _filter = 'all'; _search = '';
+      showState('connect');
+    });
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function csvCell(s) {
+      s = String(s);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s;
+    }
+    function relativeDate(iso) {
+      const d    = new Date(iso);
+      const days = Math.floor((Date.now() - d) / 86400000);
+      if (isNaN(days))  return 'Unknown';
+      if (days === 0)   return 'Today';
+      if (days === 1)   return 'Yesterday';
+      if (days < 30)    return `${days}d ago`;
+      if (days < 365)   return `${Math.floor(days / 30)}mo ago`;
+      return `${Math.floor(days / 365)}y ago`;
+    }
+    function appEmoji(name) {
+      const n = name.toLowerCase();
+      if (n.includes('slack'))      return '💬';
+      if (n.includes('zoom'))       return '📹';
+      if (n.includes('github'))     return '🐙';
+      if (n.includes('notion'))     return '📝';
+      if (n.includes('salesforce')) return '☁️';
+      if (n.includes('hubspot'))    return '🔶';
+      if (n.includes('jira') || n.includes('atlassian')) return '🔷';
+      if (n.includes('dropbox'))    return '📦';
+      if (n.includes('box'))        return '📦';
+      if (n.includes('figma'))      return '🎨';
+      if (n.includes('zapier'))     return '⚡';
+      if (n.includes('stripe'))     return '💳';
+      if (n.includes('docusign'))   return '✍️';
+      if (n.includes('grammarly'))  return '✏️';
+      if (n.includes('gong') || n.includes('chorus')) return '🎙️';
+      if (n.includes('zoom'))       return '📹';
+      return '📱';
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    boot();
+  })();
+  </script>
+
+</body>
+</html>
