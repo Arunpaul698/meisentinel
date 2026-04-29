@@ -687,20 +687,11 @@
     }
 
     // ── Connect ────────────────────────────────────────────────────────────
-    document.getElementById('btn-connect').addEventListener('click', async () => {
+    document.getElementById('btn-connect').addEventListener('click', () => {
       const btn = document.getElementById('btn-connect');
       btn.textContent = 'Connecting…';
       btn.disabled = true;
-      try {
-        const r = await fetch(BACKEND + '/workspace/auth-url');
-        if (!r.ok) throw new Error(`Server error ${r.status}`);
-        const { url } = await r.json();
-        location.href = url;
-      } catch (e) {
-        btn.textContent = 'Continue with Google';
-        btn.disabled = false;
-        showError(e.message);
-      }
+      location.href = BACKEND + '/auth/google/start';
     });
 
     // ── Polling ────────────────────────────────────────────────────────────

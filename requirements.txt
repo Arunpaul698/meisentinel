@@ -7,3 +7,5 @@ pydantic==2.10.6
 pefile==2023.2.7
 yara-python==4.5.1
 fastapi-mcp==0.4.0
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0

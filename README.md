@@ -96,22 +96,66 @@ meisentis/
 ### Run Locally
 
 ```bash
-# Set API keys
-export VIRUSTOTAL_API_KEY="your_key_here"
-export ANTHROPIC_API_KEY="your_key_here"
+# Copy env template and fill in your keys
+cp .env.example .env
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Start backend
 uvicorn main:app --reload --port 8000
-
-# Open frontend
-# Just open index.html in your browser
 ```
 
-Backend runs at: `http://localhost:8000`
+Backend runs at: `http://localhost:8000`  
 API docs at: `http://localhost:8000/docs`
+
+---
+
+## Testing the Google Workspace OAuth Flow Locally (ngrok)
+
+Google OAuth requires an HTTPS redirect URI, so you need ngrok to tunnel your local server.
+
+**1. Install ngrok** (one-time)
+```bash
+# macOS
+brew install ngrok
+
+# or download from https://ngrok.com/download
+```
+
+**2. Start your backend**
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+**3. In a second terminal, expose it via ngrok**
+```bash
+ngrok http 8000
+```
+Copy the HTTPS URL it gives you, e.g. `https://abc123.ngrok-free.app`
+
+**4. Register the ngrok redirect URI in Google Cloud Console**
+
+Go to [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials), edit your OAuth 2.0 Client ID, and add:
+```
+https://abc123.ngrok-free.app/auth/google/callback
+```
+to **Authorized redirect URIs**. Save.
+
+**5. Update your `.env`**
+```bash
+GOOGLE_REDIRECT_URI=https://abc123.ngrok-free.app/auth/google/callback
+GOOGLE_FRONTEND_URL=http://localhost:8000/oauth.html   # or open oauth.html directly
+```
+Restart `uvicorn` to pick up the env change.
+
+**6. Test the flow**
+
+Open `oauth.html` in your browser, click **Continue with Google**, consent, and you should be redirected back. Verify the token was saved:
+```bash
+sqlite3 tokens.db "SELECT domain, admin_email, updated_at FROM tenants;"
+```
+You should see a row with your tenant domain and admin email. ✓
 
 ---
 

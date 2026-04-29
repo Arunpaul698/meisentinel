@@ -27,8 +27,15 @@ from mcp_models import (
     StaticAnalysisResult, ThreatIntelResult, CodeSigningResult, SCAResult,
     FileScanResponse, UrlScanResponse, HashScanResponse, HealthResponse,
 )
+from google_auth import init_db, get_auth_url as ga_get_auth_url, exchange_code as ga_exchange_code, save_tokens
 
 app = FastAPI(title="SSA Agent MVP")
+
+
+@app.on_event("startup")
+async def _startup():
+    init_db()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -577,6 +584,61 @@ def _new_session(admin: str = "") -> tuple[str, dict]:
     _WS_SESSIONS[sid] = sess
     return sid, sess
 
+
+# ── Google OAuth2 endpoints (new) ─────────────────────────────────────────────
+
+@app.get("/auth/google/start")
+async def auth_google_start():
+    """Redirect browser directly to Google OAuth consent screen."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(503, "Google OAuth not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET")
+    _evict_stale()
+    state = uuid.uuid4().hex
+    _WS_SESSIONS[state] = {"status": "awaiting_callback", "created": time.time()}
+    return RedirectResponse(ga_get_auth_url(state), status_code=302)
+
+
+@app.get("/auth/google/callback")
+async def auth_google_callback(
+    code:  Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Google redirects here. Exchanges code, persists tokens to SQLite, starts audit."""
+    _evict_stale()
+    if error:
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error={error}", status_code=302)
+    if not code or not state:
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error=missing_params", status_code=302)
+    pre = _WS_SESSIONS.get(state)
+    if not pre or pre.get("status") != "awaiting_callback":
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error=invalid_state", status_code=302)
+    del _WS_SESSIONS[state]
+
+    try:
+        creds        = await ga_exchange_code(code, state)
+        access_token = creds.token
+        admin_email  = await get_admin_email(access_token)
+        domain       = admin_email.split("@", 1)[-1] if "@" in admin_email else admin_email
+        save_tokens(domain, admin_email, creds)
+        sid, sess = _new_session(admin_email)
+        asyncio.create_task(
+            fetch_and_score_all_apps(
+                access_token=access_token,
+                vt_key=VIRUSTOTAL_API_KEY,
+                anthropic_key=ANTHROPIC_API_KEY,
+                session=sess,
+            )
+        )
+        return RedirectResponse(
+            f"{GOOGLE_FRONTEND_URL}?session={sid}&admin={admin_email}",
+            status_code=302,
+        )
+    except Exception as exc:
+        return RedirectResponse(f"{GOOGLE_FRONTEND_URL}?error={exc}", status_code=302)
+
+
+# ── Legacy workspace auth endpoints (kept for backward-compat) ─────────────────
 
 @app.get("/workspace/auth-url")
 async def workspace_auth_url():
