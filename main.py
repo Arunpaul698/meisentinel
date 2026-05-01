@@ -28,6 +28,7 @@ from mcp_models import (
     FileScanResponse, UrlScanResponse, HashScanResponse, HealthResponse,
 )
 from google_auth import init_db, get_auth_url as ga_get_auth_url, exchange_code as ga_exchange_code, save_tokens
+import database as db
 
 app = FastAPI(title="SSA Agent MVP")
 
@@ -35,6 +36,7 @@ app = FastAPI(title="SSA Agent MVP")
 @app.on_event("startup")
 async def _startup():
     init_db()
+    await db.init_pool()
 
 
 app.add_middleware(
@@ -453,7 +455,7 @@ async def upload_finalize(
         score        = compute_risk_score(vt_stats, static, threat, signing, sca)
         label, color = risk_label(score)
         summary      = await llm_summary(filename, vt_stats, score, static, threat, signing, sca)
-        return {
+        result = {
             "target":          filename,
             "type":            "file",
             "sha256":          sha256,
@@ -468,6 +470,8 @@ async def upload_finalize(
             "summary":         summary,
             "note":            "VT hash-only lookup (file >32MB)" if len(file_bytes) > _VT_DIRECT_LIMIT else None,
         }
+        asyncio.create_task(db.save_scan(result))
+        return result
     return await _stream_json(_finalize_scan())
 
 
@@ -490,7 +494,7 @@ async def scan_file(file: UploadFile = File(...)):
         score        = compute_risk_score(vt_stats, static, threat, signing, sca)
         label, color = risk_label(score)
         summary      = await llm_summary(filename, vt_stats, score, static, threat, signing, sca)
-        return {
+        result = {
             "target":          filename,
             "type":            "file",
             "sha256":          sha256,
@@ -504,6 +508,8 @@ async def scan_file(file: UploadFile = File(...)):
             "risk_color":      color,
             "summary":         summary,
         }
+        asyncio.create_task(db.save_scan(result))
+        return result
     return await _stream_json(_do())
 
 
@@ -517,7 +523,7 @@ async def scan_url(url: str = Form(...)):
         score        = compute_risk_score(vt_stats, threat=threat)
         label, color = risk_label(score)
         summary      = await llm_summary(url, vt_stats, score, threat=threat)
-        return {
+        result = {
             "target":       url,
             "type":         "url",
             "vt_stats":     vt_stats,
@@ -527,6 +533,8 @@ async def scan_url(url: str = Form(...)):
             "risk_color":   color,
             "summary":      summary,
         }
+        asyncio.create_task(db.save_scan(result))
+        return result
     return await _stream_json(_do())
 
 
@@ -722,6 +730,33 @@ async def workspace_apps(session: str):
         "apps":       sess["apps"],
         "fetched_at": datetime.utcnow().isoformat() + "Z",
     }
+
+
+# ── Scan history endpoints ────────────────────────────────────────────────────
+
+@app.get("/scans")
+async def list_scans(
+    limit:  int = 50,
+    offset: int = 0,
+    tier:   Optional[str] = None,
+):
+    """Return paginated scan history, newest first. Requires DATABASE_URL."""
+    return {"scans": await db.get_scans(limit=limit, offset=offset, tier=tier)}
+
+
+@app.get("/scans/stats")
+async def scan_stats():
+    """Aggregate counts by risk tier."""
+    return await db.get_stats()
+
+
+@app.get("/scans/{scan_id}")
+async def get_scan(scan_id: str):
+    """Return the full result blob for one scan."""
+    result = await db.get_scan_by_id(scan_id)
+    if not result:
+        raise HTTPException(404, "Scan not found")
+    return result
 
 
 # ── MCP endpoints ─────────────────────────────────────────────────────────────
