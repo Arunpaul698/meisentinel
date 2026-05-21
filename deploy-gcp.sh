@@ -15,6 +15,7 @@ set -e
 # --- CONFIGURATION ---
 DEFAULT_REGION="us-central1"
 SERVICE_NAME="meisentis"
+REPO_NAME="meisentis"
 
 # Get current project ID
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null || echo "")
@@ -29,17 +30,33 @@ echo "🚀 Deploying Meisentis to Google Cloud..."
 echo "🔹 Project ID:  $PROJECT_ID"
 echo "🔹 Service:     $SERVICE_NAME"
 echo "🔹 Region:      $DEFAULT_REGION"
+echo "🔹 Repository:  $REPO_NAME"
 echo ""
+
+# Enable Artifact Registry API
+echo "🔑 Enabling Artifact Registry API..."
+gcloud services enable artifactregistry.googleapis.com
+
+# Create the Artifact Registry repository if it doesn't exist
+echo "📦 Ensuring Artifact Registry repository '$REPO_NAME' exists in $DEFAULT_REGION..."
+gcloud artifacts repositories describe "$REPO_NAME" --location="$DEFAULT_REGION" >/dev/null 2>&1 || \
+gcloud artifacts repositories create "$REPO_NAME" \
+    --repository-format=docker \
+    --location="$DEFAULT_REGION" \
+    --description="Meisentis Docker Repository" \
+    --quiet
+
+IMAGE_URL="$DEFAULT_REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$SERVICE_NAME"
 
 # Step 1: Build the container using Google Cloud Build (no local Docker required!)
 echo "📦 Step 1: Building container image via Google Cloud Build..."
-gcloud builds submit --tag "gcr.io/$PROJECT_ID/$SERVICE_NAME"
+gcloud builds submit --tag "$IMAGE_URL"
 
 # Step 2: Deploy to Google Cloud Run
 echo ""
 echo "☁️ Step 2: Deploying to Google Cloud Run (serverless)..."
 gcloud run deploy "$SERVICE_NAME" \
-    --image "gcr.io/$PROJECT_ID/$SERVICE_NAME" \
+    --image "$IMAGE_URL" \
     --platform managed \
     --region "$DEFAULT_REGION" \
     --allow-unauthenticated \
