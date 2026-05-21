@@ -858,3 +858,10 @@ mcp = FastApiMCP(
     include_operations=["scan_url_mcp", "scan_hash_mcp", "scan_file_base64_mcp", "health_mcp"],
 )
 mcp.mount()
+
+
+# ── Mount Static Frontend ─────────────────────────────────────────────────────
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+app.mount("/", StaticFiles(directory=os.path.dirname(__file__), html=True), name="static")
+
