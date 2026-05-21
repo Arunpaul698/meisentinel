@@ -490,7 +490,7 @@ renderActivity(allScans);
 async function checkBackend(){
   const el = document.getElementById('backend-status');
   try {
-    const r = await fetch('https://meisentinel.onrender.com/health', {signal: AbortSignal.timeout(3000)});
+    const r = await fetch(`${BACKEND}/health`, {signal: AbortSignal.timeout(3000)});
     if(r.ok){ el.textContent='Online'; el.className='qs-val qs-online'; }
     else     { el.textContent='Error';  el.className='qs-val qs-offline'; }
   } catch {

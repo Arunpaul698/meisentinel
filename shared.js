@@ -1,7 +1,9 @@
 // ── Meisentis — Shared nav shell ─────────────────────────────────────────────
 // Include this script in every page. Injects the nav and applies global CSS.
 
-const BACKEND = 'https://meisentinel.onrender.com';
+const BACKEND = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '')
+  ? 'http://localhost:8000'
+  : 'https://meisentinel.onrender.com';
 const BASE_URL = '';
 
 const NAV_HTML = `
