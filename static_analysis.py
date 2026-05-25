@@ -1,6 +1,7 @@
 import asyncio
 import math
 import os
+from typing import Optional
 
 try:
     import pefile
@@ -77,7 +78,7 @@ def _file_type(data: bytes) -> str:
     return "BINARY"
 
 
-def _analyze_pe(file_bytes: bytes) -> tuple[list, dict | None]:
+def _analyze_pe(file_bytes: bytes) -> tuple[list, Optional[dict]]:
     findings = []
     pe_info = None
     if not _pefile_ok:

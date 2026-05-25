@@ -6,10 +6,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080
 
-# Install system dependencies (e.g., osslsigncode for Authenticode signature checks)
+# Install system dependencies (including osslsigncode, git, nodejs, and npm for background Ruflo agent runs)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     osslsigncode \
     ca-certificates \
+    git \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

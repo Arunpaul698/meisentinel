@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Security
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Security, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, RedirectResponse, StreamingResponse
@@ -22,6 +22,7 @@ from static_analysis import analyze_static
 from threat_intel import lookup_hash, lookup_url
 from code_signing import check_signing
 from sca import scan_sca
+from remediation import execute_remediation_pipeline, REMEDIATION_STATUS
 from mcp_models import (
     VTStats, ScanFinding, CVEFinding,
     StaticAnalysisResult, ThreatIntelResult, CodeSigningResult, SCAResult,
@@ -521,6 +522,44 @@ async def scan_url(url: str = Form(...)):
             "summary":      summary,
         }
     return await _stream_json(_do())
+
+
+class RemediationRequest(BaseModel):
+    repo_url: str = Field(..., description="The GitHub repository URL, e.g. https://github.com/user/repo")
+    manifest_path: str = Field(..., description="Path to the manifest file inside the repo, e.g. requirements.txt")
+    github_token: str = Field(..., description="GitHub Personal Access Token (PAT) for auth")
+    branch: str = Field("main", description="The branch to checkout and target")
+
+
+@app.post("/scan/remediate")
+async def trigger_remediation(payload: RemediationRequest, background_tasks: BackgroundTasks):
+    if not payload.repo_url or not payload.manifest_path or not payload.github_token:
+        raise HTTPException(400, "Missing required parameters")
+    
+    session_id = uuid.uuid4().hex
+    REMEDIATION_STATUS[session_id] = {
+        "status": "queued",
+        "progress": 0,
+        "message": "Queued for autonomous AI remediation..."
+    }
+    
+    background_tasks.add_task(
+        execute_remediation_pipeline,
+        session_id,
+        payload.repo_url,
+        payload.manifest_path,
+        payload.github_token,
+        payload.branch
+    )
+    
+    return {"session_id": session_id, "status": "queued"}
+
+
+@app.get("/scan/remediate/status")
+async def get_remediation_status(session_id: str):
+    if session_id not in REMEDIATION_STATUS:
+        raise HTTPException(404, "Remediation session not found")
+    return REMEDIATION_STATUS[session_id]
 
 
 @app.post("/report/pdf")
