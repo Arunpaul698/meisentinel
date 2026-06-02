@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meisentis — RAG Knowledge Base</title>
+  <script src="shared.js"></script>
+  <style>
+    .container {
+      max-width: 1080px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+
+    .header-area {
+      margin-bottom: 32px;
+    }
+    .header-title {
+      font-size: 28px;
+      font-weight: 600;
+      color: #0F1923;
+      letter-spacing: -0.5px;
+    }
+    .header-sub {
+      font-size: 14px;
+      color: #64748B;
+      margin-top: 4px;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 32px;
+    }
+    @media (max-width: 860px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: #ffffff;
+      border: 1px solid #E8ECF0;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0F1923;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Inputs */
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748B;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .input-field {
+      width: 100%;
+      height: 40px;
+      padding: 8px 12px;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      color: #0F1923;
+      outline: none;
+      transition: all 0.15s;
+    }
+    .input-field:focus {
+      border-color: #0F1923;
+      background: #ffffff;
+    }
+    textarea.input-field {
+      height: 180px;
+      resize: vertical;
+    }
+
+    /* Buttons */
+    .btn-action {
+      height: 40px;
+      padding: 0 20px;
+      background: #0F1923;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-action:hover {
+      background: #1E293B;
+    }
+    .btn-action:disabled {
+      background: #94A3B8;
+      cursor: not-allowed;
+    }
+
+    /* Retrieval Results */
+    .result-item {
+      padding: 16px;
+      border-radius: 8px;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      margin-bottom: 12px;
+    }
+    .result-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-family: 'DM Mono', monospace;
+      color: #94A3B8;
+      margin-bottom: 6px;
+    }
+    .result-score {
+      color: #10B981;
+      font-weight: 500;
+    }
+    .result-doc-title {
+      font-weight: 600;
+      color: #0F1923;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .result-text {
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.5;
+    }
+
+    /* Answer Synthesis */
+    .answer-box {
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #1E3A8A;
+      line-height: 1.6;
+    }
+    .answer-header {
+      font-weight: 600;
+      font-size: 12px;
+      color: #2563EB;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    /* Stats Counter */
+    .stat-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      background: #F1F5F9;
+      color: #475569;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+<script>injectNav('rag');</script>
+
+<div class="container">
+  <div class="header-area">
+    <h1 class="header-title">RAG Knowledge Base</h1>
+    <div class="header-sub">Query your platform's security memory and ingest threat playbooks.</div>
+  </div>
+
+  <div class="dashboard-grid">
+    <!-- Search / Retrieval Area -->
+    <div>
+      <div class="card">
+        <div class="card-title">Ask the Platform Memory</div>
+        <div class="form-group" style="display: flex; gap: 8px; margin-bottom: 0;">
+          <input type="text" id="queryInput" class="input-field" placeholder="Search a threat, signature, or CVE (e.g. 'curl SOCKS5 overflow')...">
+          <button id="btnSearch" class="btn-action" onclick="searchRag()">Query Memory</button>
+        </div>
+      </div>
+
+      <div id="loadingIndicator" style="display: none; text-align: center; padding: 20px;">
+        <span class="header-sub">Processing semantic search & generating AI recommendations...</span>
+      </div>
+
+      <!-- Search Output -->
+      <div id="searchOutput" style="display: none;">
+        <div class="card">
+          <div class="card-title">AI Remediation Synthesis</div>
+          <div class="answer-box">
+            <div class="answer-header">Claude AI Summary</div>
+            <div id="synthesisText"></div>
+          </div>
+
+          <div class="card-title" style="margin-top: 24px; font-size: 14px;">Retrieved Incident Reference Context</div>
+          <div id="retrievedIncidents"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ingestion Area -->
+    <div>
+      <div class="card">
+        <div class="card-title">
+          <span>Ingest Playbook</span>
+          <span id="ragStats" class="stat-badge">0 document chunks</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Document Title</label>
+          <input type="text" id="docTitle" class="input-field" placeholder="e.g. CVE-2023-38545 Remediation Guide">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Incident Content / Playbook</label>
+          <textarea id="docContent" class="input-field" placeholder="Paste playbooks, mitigation steps, or past malware audit reports here..."></textarea>
+        </div>
+        <button id="btnIngest" class="btn-action" style="width: 100%;" onclick="ingestPlaybook()">Ingest Document</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // On page load, fetch database stats
+  async function fetchStats() {
+    try {
+      const res = await fetch(`${BACKEND}/rag/stats`);
+      if (res.ok) {
+        const stats = await res.json();
+        document.getElementById('ragStats').innerText = `${stats.total_chunks} chunks (${stats.total_documents} docs)`;
+      }
+    } catch (e) {
+      console.error("Failed to load stats", e);
+    }
+  }
+  fetchStats();
+
+  async function ingestPlaybook() {
+    const title = document.getElementById('docTitle').value.trim();
+    const content = document.getElementById('docContent').value.trim();
+    const btn = document.getElementById('btnIngest');
+
+    if (!title || !content) {
+      alert("Please fill in both the Title and the Content fields.");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Ingesting...";
+
+    try {
+      const res = await fetch(`${BACKEND}/rag/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content })
+      });
+
+      if (res.ok) {
+        alert("Document successfully ingested and cached into the RAG vector index!");
+        document.getElementById('docTitle').value = "";
+        document.getElementById('docContent').value = "";
+        fetchStats();
+      } else {
+        const err = await res.text();
+        alert(`Ingestion failed: ${err}`);
+      }
+    } catch (e) {
+      alert(`Network error during ingestion: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "Ingest Document";
+    }
+  }
+
+  async function searchRag() {
+    const query = document.getElementById('queryInput').value.trim();
+    if (!query) return;
+
+    const loader = document.getElementById('loadingIndicator');
+    const output = document.getElementById('searchOutput');
+    const btn = document.getElementById('btnSearch');
+
+    loader.style.display = "block";
+    output.style.display = "none";
+    btn.disabled = true;
+
+    try {
+      const res = await fetch(`${BACKEND}/rag/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, limit: 3 })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        document.getElementById('synthesisText').innerText = data.answer;
+
+        const container = document.getElementById('retrievedIncidents');
+        container.innerHTML = "";
+
+        if (data.results && data.results.length > 0) {
+          data.results.forEach(r => {
+            const item = document.createElement('div');
+            item.className = "result-item";
+            item.innerHTML = `
+              <div class="result-meta">
+                <span>RAG Record ID: #${r.id}</span>
+                <span class="result-score">Confidence Score: ${(r.score * 100).toFixed(2)}%</span>
+              </div>
+              <div class="result-doc-title">${r.title}</div>
+              <div class="result-text">${r.content}</div>
+            `;
+            container.appendChild(item);
+          });
+        } else {
+          container.innerHTML = '<div class="result-text" style="color: #94A3B8;">No similar historical playbooks or incidents found in RAG database.</div>';
+        }
+        output.style.display = "block";
+      } else {
+        const err = await res.text();
+        alert(`Search query failed: ${err}`);
+      }
+    } catch (e) {
+      alert(`Network error during search: ${e.message}`);
+    } finally {
+      loader.style.display = "none";
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>

@@ -23,6 +23,7 @@ from threat_intel import lookup_hash, lookup_url
 from code_signing import check_signing
 from sca import scan_sca
 from remediation import execute_remediation_pipeline, REMEDIATION_STATUS
+from rag import RagSystem
 from mcp_models import (
     VTStats, ScanFinding, CVEFinding,
     StaticAnalysisResult, ThreatIntelResult, CodeSigningResult, SCAResult,
@@ -30,6 +31,7 @@ from mcp_models import (
 )
 
 app = FastAPI(title="SSA Agent MVP")
+rag_system = RagSystem()
 
 app.add_middleware(
     CORSMiddleware,
@@ -198,14 +200,38 @@ async def llm_summary(
         if top:
             extra += f"\nSCA / Known CVEs: {json.dumps(top)}"
 
+    # Retrieve RAG context if database is populated
+    rag_context = ""
+    try:
+        query_signals = []
+        if sca and sca.get("findings"):
+            query_signals.extend([f["cve"] for f in sca["findings"] if f.get("cve")])
+        if static and static.get("findings"):
+            query_signals.extend([f["signal"] for f in static["findings"] if f.get("signal")])
+        
+        # Combine target name and threat signals for semantic search
+        query_str = f"{target} " + " ".join(query_signals)
+        query_str = query_str.strip()
+        
+        if query_str:
+            matches = await rag_system.retrieve(query_str, limit=2)
+            if matches:
+                rag_context = "\n\nRelevant Historical Incident/Remediation Context:\n"
+                for m in matches:
+                    rag_context += f"--- Incident/Playbook: {m['title']} (similarity: {m['score']})\n{m['content']}\n"
+    except Exception as re_err:
+        print(f"[RAG error during llm_summary] {re_err}")
+
     prompt = (
         f"You are a software security analyst. Summarize this multi-signal scan result "
         f"in 3-4 concise sentences for a non-technical business audience.\n\n"
         f"Target: {target}\n"
         f"Risk Score: {score}/100\n"
         f"VirusTotal Stats: {json.dumps(vt_stats)}"
-        f"{extra}\n\n"
+        f"{extra}"
+        f"{rag_context}\n\n"
         f"Be direct. State if it's safe or not, why, and what action to take. "
+        f"If historical incident context is provided, prioritize integrating its specific remediation advice. "
         f"Do not use bullet points. Plain paragraph only."
     )
 
@@ -560,6 +586,79 @@ async def get_remediation_status(session_id: str):
     if session_id not in REMEDIATION_STATUS:
         raise HTTPException(404, "Remediation session not found")
     return REMEDIATION_STATUS[session_id]
+
+
+class IngestRequest(BaseModel):
+    title: str = Field(..., description="Title of the incident or playbook document")
+    content: str = Field(..., description="Text content to split and ingest")
+    metadata: Optional[dict] = Field(None, description="Optional metadata keys")
+
+
+class QueryRequest(BaseModel):
+    query: str = Field(..., description="Search query or incident description")
+    limit: Optional[int] = Field(3, description="Number of results to retrieve")
+
+
+@app.post("/rag/ingest")
+async def rag_ingest(payload: IngestRequest):
+    try:
+        chunks = await rag_system.ingest_document(payload.title, payload.content, payload.metadata)
+        return {"status": "ok", "chunks_ingested": chunks}
+    except Exception as e:
+        raise HTTPException(500, f"RAG ingestion failed: {str(e)}")
+
+
+@app.post("/rag/query")
+async def rag_query(payload: QueryRequest):
+    try:
+        results = await rag_system.retrieve(payload.query, payload.limit)
+        
+        # Build synthesis prompt for generation layer
+        context_text = "\n\n".join([
+            f"--- Incidents/Playbook: {r['title']} (similarity: {r['score']})\n{r['content']}"
+            for r in results
+        ])
+        
+        answer = ""
+        if results and ANTHROPIC_API_KEY:
+            prompt = (
+                f"You are a software security expert. Synthesize a concise, actionable remediation recommendation "
+                f"to the user's threat inquiry based on the retrieved historical context logs/playbooks provided below. "
+                f"Explain how past events relate to this issue. If the context is not directly relevant, note that "
+                f"this is general best practice.\n\n"
+                f"Retrieved Context:\n{context_text}\n\n"
+                f"User Question/Threat: {payload.query}\n\n"
+                f"Response:"
+            )
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": ANTHROPIC_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5",
+                        "max_tokens": 500,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+                resp.raise_for_status()
+                answer = resp.json()["content"][0]["text"]
+        elif not ANTHROPIC_API_KEY:
+            answer = "RAG AI synthesis unavailable — ANTHROPIC_API_KEY not configured."
+        else:
+            answer = "No contextually similar security playbooks or incidents found in RAG database."
+
+        return {"results": results, "answer": answer}
+    except Exception as e:
+        raise HTTPException(500, f"RAG query failed: {str(e)}")
+
+
+@app.get("/rag/stats")
+def rag_stats():
+    return rag_system.get_stats()
 
 
 @app.post("/report/pdf")

@@ -18,6 +18,7 @@ const NAV_HTML = `
   <div class="m-nav-links">
     <a href="${BASE_URL}landing.html"   class="m-nav-link" data-page="landing">Product</a>
     <a href="${BASE_URL}dashboard.html" class="m-nav-link" data-page="dashboard">Dashboard</a>
+    <a href="${BASE_URL}rag.html"       class="m-nav-link" data-page="rag">RAG Memory</a>
     <a href="${BASE_URL}portal.html"    class="m-nav-link" data-page="portal">Scan</a>
   </div>
   <div class="m-nav-right">
